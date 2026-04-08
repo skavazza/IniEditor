@@ -41,4 +41,4 @@ Esta aplicação desktop permite a designers e entusiastas do Rainmeter criar e 
 
 ## 📋 Roadmap e Arquitetura
 
-O planejamento detalhado da aplicação, incluindo as fases de desenvolvimento, design da interface e arquitetura de classes, pode ser encontrado no arquivo [`PROMPT_PYTHON_CODER.md`](PROMPT_PYTHON_CODER.md).
+O planejamento detalhado da aplicação, incluindo as fases de desenvolvimento, design da interface e arquitetura de classes, pode ser encontrado no arquivo [`TO_CODER.md`](TO_CODER.md).
