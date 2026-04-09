@@ -210,10 +210,11 @@ class LayerPanel(QWidget):
 
 class PropertyPanel(QWidget):
     property_changed = None # Callback function(section, key, value)
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_section = None
+        self._available_styles = []  # seções disponíveis como MeterStyle
         self.init_ui()
 
     def init_ui(self):
@@ -236,6 +237,10 @@ class PropertyPanel(QWidget):
         else:
             self.setStyleSheet("background-color: #f0f0f0; border-left: 1px solid #cccccc;")
 
+    def set_available_styles(self, style_sections):
+        """Define quais seções podem ser usadas como MeterStyle."""
+        self._available_styles = style_sections
+
     def set_properties(self, section, props):
         self.current_section = section
         # Limpar formulário atual
@@ -256,7 +261,8 @@ class PropertyPanel(QWidget):
         self._add_combo_property("AntiAlias", props.get('antialias', '1'), ['1', '0'])
         self._add_property("Padding", props.get('padding', ''))
         self._add_combo_property("DynamicVariables", props.get('dynamicvariables', '0'), ['0', '1'])
-        
+        self._add_meterstyle_property("MeterStyle", props.get('meterstyle', ''))
+
         # Propriedades específicas por Meter
         meter_type = props.get('meter', '').lower()
         if meter_type == 'string':
@@ -370,6 +376,43 @@ class PropertyPanel(QWidget):
             
         combo.currentTextChanged.connect(lambda t, k=key: self._on_property_changed(k, t))
         self.form_layout.addRow(key + ":", combo)
+
+    def _add_meterstyle_property(self, key, value):
+        """Campo editável com autocomplete para MeterStyle (suporta múltiplos via '|')."""
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+
+        edit = QLineEdit(str(value))
+        edit.setPlaceholderText("Ex: StyleBase | StyleText")
+        edit.editingFinished.connect(lambda k=key, e=edit: self._on_property_changed(k, e.text()))
+        layout.addWidget(edit, 1)
+
+        if self._available_styles:
+            add_btn = QPushButton("+")
+            add_btn.setFixedWidth(22)
+            add_btn.setToolTip("Adicionar estilo da lista")
+            add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+            def _pick_style():
+                from PyQt6.QtWidgets import QMenu
+                menu = QMenu()
+                for s in self._available_styles:
+                    menu.addAction(s)
+                chosen = menu.exec(add_btn.mapToGlobal(add_btn.rect().bottomLeft()))
+                if chosen:
+                    current = edit.text().strip()
+                    if current:
+                        edit.setText(current + " | " + chosen.text())
+                    else:
+                        edit.setText(chosen.text())
+                    self._on_property_changed(key, edit.text())
+
+            add_btn.clicked.connect(_pick_style)
+            layout.addWidget(add_btn)
+
+        self.form_layout.addRow(key + ":", container)
 
     def _on_property_changed(self, key, value):
         if self.property_changed and self.current_section:

@@ -555,9 +555,61 @@ class VisualCanvas(QGraphicsView):
 
     def _setup_auxiliary_items(self):
         """Inicializa ou reinicializa itens que não são meters (ex: limites)."""
+        self.background_item = QGraphicsPixmapItem()
+        self.background_item.setZValue(-9)
+        self.background_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+        self.background_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+        self.scene_obj.addItem(self.background_item)
+
         self.boundary_item = SkinBoundaryItem()
         self.scene_obj.addItem(self.boundary_item)
         self.boundary_item.setVisible(self.show_boundary_flag)
+
+    def set_skin_background(self, image_path, bg_mode, solid_color_str=None):
+        """Exibe o background da skin conforme as propriedades da seção [Rainmeter].
+
+        bg_mode:
+          0 = transparente (nenhum background)
+          1 = SolidColor
+          2 = imagem
+          3 = imagem (scaled/fit)
+        """
+        self.background_item.setPixmap(QPixmap())  # limpa
+
+        # Modo transparente
+        if bg_mode == 0:
+            return
+
+        # Modo cor sólida (BackgroundMode=1)
+        if bg_mode == 1:
+            if solid_color_str:
+                parts = [p.strip() for p in solid_color_str.split(',')]
+                try:
+                    r, g, b = int(parts[0]), int(parts[1]), int(parts[2])
+                    a = int(parts[3]) if len(parts) >= 4 else 255
+                    color = QColor(r, g, b, a)
+                except (ValueError, IndexError):
+                    color = QColor(0, 0, 0, 128)
+            else:
+                color = QColor(0, 0, 0, 128)
+            # Calcula tamanho da cena para preencher o background
+            scene_rect = self.scene_obj.itemsBoundingRect()
+            w = max(int(scene_rect.width()), 200)
+            h = max(int(scene_rect.height()), 200)
+            pix = QPixmap(w, h)
+            pix.fill(color)
+            self.background_item.setPixmap(pix)
+            self.background_item.setPos(scene_rect.topLeft())
+            return
+
+        # Modo imagem (BackgroundMode=2 ou 3)
+        if not image_path or not os.path.exists(image_path):
+            return
+        pix = QPixmap(image_path)
+        if pix.isNull():
+            return
+        self.background_item.setPixmap(pix)
+        self.background_item.setPos(0, 0)
 
     def clear_canvas(self):
         self.scene_obj.clear()

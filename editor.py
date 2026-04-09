@@ -993,7 +993,28 @@ class IniEditor(QMainWindow):
         self.canvas_widget.clear_canvas()
         if not self.ini_file:
             return
-            
+
+        # Background da seção [Rainmeter]
+        if self.config.has_section('Rainmeter'):
+            raw_bg = self.config.get('Rainmeter', 'Background', fallback='')
+            bg_mode_str = self.config.get('Rainmeter', 'BackgroundMode', fallback='2')
+            solid_color = self.config.get('Rainmeter', 'SolidColor', fallback=None)
+            try:
+                bg_mode = int(bg_mode_str)
+            except ValueError:
+                bg_mode = 2
+
+            # Resolver #@# e variáveis no caminho
+            resolved_bg = self._resolve_props({'bg': raw_bg}).get('bg', raw_bg)
+            bg_path = ''
+            if resolved_bg:
+                if not os.path.isabs(resolved_bg):
+                    bg_path = os.path.join(os.path.dirname(self.ini_file), resolved_bg)
+                else:
+                    bg_path = resolved_bg
+
+            self.canvas_widget.set_skin_background(bg_path, bg_mode, solid_color)
+
         meters_data = []
         prev_item = None
         # Percorrer todas as seções em busca de Meters
@@ -1090,6 +1111,12 @@ class IniEditor(QMainWindow):
             props = {}
             for key, val in self.config.items(section):
                 props[key.lower()] = val
+            # Seções sem Meter= são candidatas a MeterStyle
+            style_sections = [
+                s for s in self.config.sections()
+                if s != section and not self.config.has_option(s, 'Meter')
+            ]
+            self.prop_panel.set_available_styles(style_sections)
             self.prop_panel.set_properties(section, props)
 
     def on_property_edited(self, section, key, value):
