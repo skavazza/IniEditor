@@ -339,6 +339,8 @@ class IniEditor(QMainWindow):
         self.canvas_widget.add_requested_signal = self.on_canvas_add_requested
         self.canvas_widget.remove_requested_signal = self.on_canvas_remove_requested
         self.canvas_widget.duplicate_requested_signal = self.on_canvas_duplicate_requested
+        self.canvas_widget.multi_move_signal = self.on_canvas_multi_moved
+        self.canvas_widget.remove_multiple_signal = self.on_canvas_remove_multiple
         
         self.prop_panel = PropertyPanel()
         self.prop_panel.property_changed = self.on_property_edited
@@ -1108,6 +1110,29 @@ class IniEditor(QMainWindow):
             if str(x) != old_x or str(y) != old_y:
                 command = MoveItemCommand(self, section, old_x, old_y, str(x), str(y))
                 self.undo_stack.push(command)
+
+    def on_canvas_multi_moved(self, moves):
+        """Chamado quando múltiplos itens foram movidos de uma vez no canvas."""
+        if self.is_updating_from_canvas:
+            return
+        self.undo_stack.beginMacro("Mover múltiplos itens")
+        for section, x, y in moves:
+            if self.config.has_section(section):
+                old_x = self.config.get(section, 'X', fallback='0')
+                old_y = self.config.get(section, 'Y', fallback='0')
+                if str(x) != old_x or str(y) != old_y:
+                    self.undo_stack.push(MoveItemCommand(self, section, old_x, old_y, str(x), str(y)))
+        self.undo_stack.endMacro()
+
+    def on_canvas_remove_multiple(self, sections):
+        """Chamado quando múltiplos itens são excluídos via canvas."""
+        if not sections:
+            return
+        self.undo_stack.beginMacro(f"Excluir {len(sections)} itens")
+        for section in sections:
+            if self.config.has_section(section):
+                self.undo_stack.push(DeleteSectionCommand(self, section))
+        self.undo_stack.endMacro()
 
     def on_canvas_add_requested(self, x, y, meter_type):
         if not self.ini_file:

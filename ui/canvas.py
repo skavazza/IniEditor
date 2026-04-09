@@ -39,8 +39,15 @@ class VisualMeterItem(QGraphicsRectItem):
                 except: pass
                 
             if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
-                if hasattr(self.scene(), 'item_moved'):
-                    self.scene().item_moved(self.section_name, value)
+                scene = self.scene()
+                canvas = getattr(scene, 'canvas', None) if scene else None
+                # Always update boundary for visual feedback during drag
+                if canvas:
+                    canvas.update_boundary()
+                # Only notify editor when not mid-drag (moves are batched on release)
+                if not (canvas and getattr(canvas, '_drag_active', False)):
+                    if hasattr(scene, 'item_moved'):
+                        scene.item_moved(self.section_name, value)
             elif change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
                 if value and hasattr(self.scene(), 'item_selected'):
                     self.scene().item_selected(self.section_name)
@@ -251,43 +258,67 @@ class VisualCanvas(QGraphicsView):
         self.grid_size = 10
         self._setup_auxiliary_items()
         
-        # Sinais para comunicar mudanças ao Editor principal
+        # Estado de drag para agrupamento de undo
+        self._drag_active = False            # True durante qualquer drag (suprime itemChange)
+        self._multi_drag_active = False      # True quando drag manual de multi-seleção
+        self._multi_drag_scene_start = None  # posição de início no scene
+        self._drag_start_positions = {}      # section → (x, y)
 
-        self.item_moved_signal = None 
+        # Sinais para comunicar mudanças ao Editor principal
+        self.item_moved_signal = None
         self.item_selected_signal = None
         self.add_requested_signal = None # function(x, y, meter_type)
         self.remove_requested_signal = None # function(section)
         self.duplicate_requested_signal = None # function(section)
+        self.multi_move_signal = None        # function(list[(section, x, y)])
+        self.remove_multiple_signal = None   # function(list[section])
+
+    def _selected_meter_items(self):
+        """Retorna lista de VisualMeterItems atualmente selecionados."""
+        result = []
+        for item in self.scene_obj.selectedItems():
+            curr = item
+            while curr:
+                if hasattr(curr, 'section_name'):
+                    if curr not in result:
+                        result.append(curr)
+                    break
+                curr = curr.parentItem()
+        return result
 
     def contextMenuEvent(self, event):
-        item = self._get_meter_item_at(event.pos())
+        selected = self._selected_meter_items()
+        item_at = self._get_meter_item_at(event.pos())
         menu = QMenu()
-        
-        if item:
-            # Menu para item selecionado
-            section = item.section_name
+
+        if len(selected) > 1:
+            # Menu de multi-seleção
+            del_action = menu.addAction(f"Excluir {len(selected)} itens selecionados")
+            action = menu.exec(event.globalPos())
+            if action == del_action and self.remove_multiple_signal:
+                self.remove_multiple_signal([i.section_name for i in selected])
+
+        elif item_at:
+            # Menu de item único
+            section = item_at.section_name
             dup_action = menu.addAction(f"Duplicar '{section}'")
             del_action = menu.addAction(f"Excluir '{section}'")
             menu.addSeparator()
-            
             action = menu.exec(event.globalPos())
             if action == dup_action:
                 if self.duplicate_requested_signal: self.duplicate_requested_signal(section)
             elif action == del_action:
                 if self.remove_requested_signal: self.remove_requested_signal(section)
+
         else:
             # Menu para área vazia
             add_string = menu.addAction("Adicionar Texto (String)")
             add_image = menu.addAction("Adicionar Imagem (Image)")
             add_bar = menu.addAction("Adicionar Barra (Bar)")
             add_shape = menu.addAction("Adicionar Forma (Shape)")
-            
             action = menu.exec(event.globalPos())
-            
-            # Obter coordenadas no scene
             scene_pos = self.mapToScene(event.pos())
             x, y = int(scene_pos.x()), int(scene_pos.y())
-            
             if action == add_string:
                 if self.add_requested_signal: self.add_requested_signal(x, y, 'String')
             elif action == add_image:
@@ -297,36 +328,136 @@ class VisualCanvas(QGraphicsView):
             elif action == add_shape:
                 if self.add_requested_signal: self.add_requested_signal(x, y, 'Shape')
 
+    def mousePressEvent(self, event):
+        self._drag_active = False
+        self._multi_drag_active = False
+        self._drag_start_positions = {}
+
+        if event.button() == Qt.MouseButton.LeftButton:
+            item = self._get_meter_item_at(event.pos())
+            ctrl = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+
+            if item and ctrl:
+                # Ctrl+Click: alterna seleção sem processar pelo super()
+                item.setSelected(not item.isSelected())
+                event.accept()
+                return
+
+            if item and item.isSelected() and len(self._selected_meter_items()) > 1:
+                # Clicou em item já selecionado dentro de multi-seleção:
+                # iniciar drag manual para não perder a seleção via super()
+                self._drag_active = True
+                self._multi_drag_active = True
+                self._multi_drag_scene_start = self.mapToScene(event.pos())
+                self._drag_start_positions = {
+                    i.section_name: (i.pos().x(), i.pos().y())
+                    for i in self._selected_meter_items()
+                }
+                event.accept()
+                return
+
+            if item:
+                # Item único – drag gerenciado pelo Qt, só rastreamos
+                self._drag_active = True
+
+        super().mousePressEvent(event)
+
+        # Grava posições iniciais para drag de item único
+        if self._drag_active and not self._multi_drag_active:
+            self._drag_start_positions = {
+                i.section_name: (i.pos().x(), i.pos().y())
+                for i in self._selected_meter_items()
+            }
+
+    def mouseMoveEvent(self, event):
+        if self._multi_drag_active:
+            delta = self.mapToScene(event.pos()) - self._multi_drag_scene_start
+            if self.snap_to_grid_flag:
+                g = self.grid_size
+                dx = round(delta.x() / g) * g
+                dy = round(delta.y() / g) * g
+            else:
+                dx, dy = delta.x(), delta.y()
+            for item in self._selected_meter_items():
+                start = self._drag_start_positions.get(item.section_name)
+                if start:
+                    item.setPos(start[0] + dx, start[1] + dy)
+            self.update_boundary()
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() != Qt.MouseButton.LeftButton or not self._drag_active:
+            super().mouseReleaseEvent(event)
+            return
+
+        was_multi = self._multi_drag_active
+        self._drag_active = False
+        self._multi_drag_active = False
+
+        if not was_multi:
+            super().mouseReleaseEvent(event)
+
+        # Coleta todos os itens que realmente se moveram
+        moves = []
+        for item in self._selected_meter_items():
+            start = self._drag_start_positions.get(item.section_name)
+            if start is None:
+                continue
+            nx, ny = item.pos().x(), item.pos().y()
+            if abs(nx - start[0]) > 0.5 or abs(ny - start[1]) > 0.5:
+                moves.append((item.section_name, int(nx), int(ny)))
+
+        self._drag_start_positions = {}
+        self.update_boundary()
+
+        if len(moves) == 1 and self.item_moved_signal:
+            self.item_moved_signal(moves[0][0], moves[0][1], moves[0][2])
+        elif len(moves) > 1 and self.multi_move_signal:
+            self.multi_move_signal(moves)
+
     def keyPressEvent(self, event):
-        # Atalhos do Canvas
-        items = self.scene_obj.selectedItems()
-        if not items:
-            super().keyPressEvent(event)
+        selected = self._selected_meter_items()
+
+        if event.key() == Qt.Key.Key_Delete and selected:
+            if len(selected) == 1:
+                if self.remove_requested_signal:
+                    self.remove_requested_signal(selected[0].section_name)
+            else:
+                if self.remove_multiple_signal:
+                    self.remove_multiple_signal([i.section_name for i in selected])
             return
-            
-        # Tentar encontrar o meter item (pode ser o item selecionado ou seu pai)
-        item = None
-        for selected in items:
-            curr = selected
-            while curr:
-                if hasattr(curr, 'section_name'):
-                    item = curr
-                    break
-                curr = curr.parentItem()
-            if item: break
-            
-        if not item:
-            super().keyPressEvent(event)
+
+        if (event.key() == Qt.Key.Key_D
+                and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                and selected):
+            if self.duplicate_requested_signal:
+                self.duplicate_requested_signal(selected[0].section_name)
             return
-            
-        section = item.section_name
-        
-        if event.key() == Qt.Key.Key_Delete:
-            if self.remove_requested_signal: self.remove_requested_signal(section)
-        elif event.key() == Qt.Key.Key_D and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            if self.duplicate_requested_signal: self.duplicate_requested_signal(section)
-        else:
-            super().keyPressEvent(event)
+
+        arrow_map = {
+            Qt.Key.Key_Left:  (-1,  0),
+            Qt.Key.Key_Right: ( 1,  0),
+            Qt.Key.Key_Up:    ( 0, -1),
+            Qt.Key.Key_Down:  ( 0,  1),
+        }
+        if event.key() in arrow_map and selected:
+            dx, dy = arrow_map[event.key()]
+            moves = []
+            for item in selected:
+                nx = int(item.pos().x()) + dx
+                ny = int(item.pos().y()) + dy
+                item.setPos(nx, ny)
+                moves.append((item.section_name, nx, ny))
+            self.update_boundary()
+            if len(moves) == 1 and self.item_moved_signal:
+                self.item_moved_signal(moves[0][0], moves[0][1], moves[0][2])
+            elif len(moves) > 1 and self.multi_move_signal:
+                self.multi_move_signal(moves)
+            return
+
+        super().keyPressEvent(event)
 
     def _apply_background_color(self):
         if self.dark_mode:

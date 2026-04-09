@@ -55,10 +55,10 @@ Estamos transformando o editor de código em um **Editor Visual (WYSIWYG)** comp
 ### 1. Elementos e Ferramentas Dinâmicas
 - [ ] **Elemento Rotator:** Suporte visual para meters do tipo Rotator com controle de centro e ângulo.
 - [ ] **Unidades Percentuais:** Suporte para posições e tamanhos relativos (ex: `X=50%`).
-- [ ] **Controles de Zoom:** Lupa para zoom in/out e botão "Ajustar à Tela" no Canvas.
+- [x] **Controles de Zoom:** Lupa para zoom in/out e botão "Ajustar à Tela" no Canvas.
 
 ### 2. Precisão e Alinhamento
-- [ ] **Grid e Snap-to-Grid:** Grade visual com encaixe automático dos elementos.
+- [x] **Grid e Snap-to-Grid:** Grade visual com encaixe automático dos elementos.
 - [ ] **Ferramentas de Alinhamento:** Botões para alinhar múltiplos itens (Esquerda, Centro, Topo, Distribuir).
 - [ ] **Indicadores de Dimensão:** Exibir coordenadas (X, Y) e tamanho (W, H) flutuantes durante o arraste.
 
