@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
     QGraphicsPathItem
 )
 from PyQt6.QtCore import Qt, QPointF, QRectF
+from PyQt6.QtGui import QTextOption
 from PyQt6.QtGui import QColor, QPixmap, QFont, QPen, QBrush, QPainter, QTransform, QPainterPath
 from PyQt6.QtWidgets import QGraphicsColorizeEffect
 
@@ -82,23 +83,56 @@ class VisualMeterItem(QGraphicsRectItem):
             except: pass
 
 class VisualStringItem(VisualMeterItem):
-    def __init__(self, section_name, text="Texto", x=0, y=0):
+    def __init__(self, section_name, text="Texto", x=0, y=0, w=0, h=0):
         super().__init__(section_name, x, y)
+        self._explicit_w = w
+        self._explicit_h = h
         self.text_item = QGraphicsTextItem(text, self)
         self.text_item.setDefaultTextColor(QColor("white"))
-        # Atualizar o tamanho do background rect baseado no texto
-        self.setRect(self.text_item.boundingRect())
+        self._apply_size()
+
+    def _apply_size(self):
+        if self._explicit_w > 0:
+            self.text_item.setTextWidth(self._explicit_w)
+        text_rect = self.text_item.boundingRect()
+        w = self._explicit_w if self._explicit_w > 0 else text_rect.width()
+        h = self._explicit_h if self._explicit_h > 0 else text_rect.height()
+        self.setRect(0, 0, w, h)
+
+    def set_explicit_size(self, w, h):
+        self._explicit_w = w
+        self._explicit_h = h
+        self._apply_size()
 
     def setFont(self, font):
         self.text_item.setFont(font)
-        self.setRect(self.text_item.boundingRect())
+        self._apply_size()
+
+    def set_text_align(self, align_str):
+        """Aplica StringAlign do Rainmeter ao QGraphicsTextItem."""
+        a = align_str.lower()
+        if 'center' in a:
+            qt_align = Qt.AlignmentFlag.AlignHCenter
+        elif 'right' in a:
+            qt_align = Qt.AlignmentFlag.AlignRight
+        else:
+            qt_align = Qt.AlignmentFlag.AlignLeft
+
+        if 'bottom' in a:
+            qt_align |= Qt.AlignmentFlag.AlignBottom
+        elif 'top' in a:
+            qt_align |= Qt.AlignmentFlag.AlignTop
+
+        opt = QTextOption(qt_align)
+        self.text_item.document().setDefaultTextOption(opt)
+        self._apply_size()
 
     def setDefaultTextColor(self, color):
         self.text_item.setDefaultTextColor(color)
 
     def setPlainText(self, text):
         self.text_item.setPlainText(text)
-        self.setRect(self.text_item.boundingRect())
+        self._apply_size()
 
 class VisualImageItem(VisualMeterItem):
     def __init__(self, section_name, pixmap_path, x=0, y=0):
@@ -703,7 +737,11 @@ class VisualCanvas(QGraphicsView):
         
         if m_type == 'string':
             text = props.get('text', section)
-            item = VisualStringItem(section, text, x, y)
+            w_str = props.get('w')
+            h_str = props.get('h')
+            str_w = self._parse_coord(w_str) if w_str else 0
+            str_h = self._parse_coord(h_str) if h_str else 0
+            item = VisualStringItem(section, text, x, y, w=str_w, h=str_h)
             
             # Aplicar fonte
             font_face = props.get('fontface')
@@ -739,6 +777,10 @@ class VisualCanvas(QGraphicsView):
                         item.setDefaultTextColor(QColor(r, g, b, a))
                     except: pass
             
+            # Alinhamento do texto
+            align_str = props.get('stringalign', 'Left')
+            item.set_text_align(align_str)
+
             # Aplicar Rotação (Angle - Rainmeter usa radianos, mas PyQt usa graus)
             angle = props.get('angle')
             if angle:
