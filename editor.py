@@ -4,7 +4,8 @@ from PyQt6.QtWidgets import (
     QMainWindow, QVBoxLayout, QHBoxLayout, QWidget,
     QTreeWidget, QTreeWidgetItem, QPushButton, QFileDialog,
     QMessageBox, QSplitter, QInputDialog, QMenu, QColorDialog, QLineEdit,
-    QTabWidget, QLabel
+    QTabWidget, QLabel, QStyledItemDelegate, QApplication, QStyle,
+    QStyleOptionViewItem, QComboBox
 )
 from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QAction, QColor, QKeySequence, QShortcut, QUndoStack
@@ -17,7 +18,7 @@ from ui import (
     VisualCanvas, LayerPanel, PropertyPanel, NewSkinDialog, 
     AddSkinDialog, PreferencesDialog, AutocompleteInputDialog, HelpDialog
 )
-from logic import find_variables_file, refresh_skin, create_backup, package_rmskin, create_new_skin, add_skin_to_project
+from logic import find_variables_file, find_inc_files, refresh_skin, create_backup, package_rmskin, create_new_skin, add_skin_to_project
 from project_manager import save_project_json, load_project_json
 from i18n import _, T
 from PyQt6.QtCore import QSettings
@@ -27,6 +28,92 @@ from commands import (
     ChangeValueCommand, MoveItemCommand, RenameSectionCommand,
     AddCommentCommand, DeleteCommentCommand
 )
+
+
+class KeyValueDelegate(QStyledItemDelegate):
+    """Renderiza itens de chave da árvore com cores separadas para nome e valor,
+    igual ao IniHighlighter do editor de código."""
+
+    def __init__(self, editor):
+        super().__init__(editor)
+        self.editor = editor
+
+    def _colors(self):
+        dark = self.editor.dark_mode
+        if dark:
+            return {
+                'key':     QColor("#9cdcfe"),
+                'var':     QColor("#4ec9b0"),
+                'num':     QColor("#b5cea8"),
+                'default': QColor("#cccccc"),
+            }
+        return {
+            'key':     QColor("#0000ff"),
+            'var':     QColor("#008080"),
+            'num':     QColor("#008000"),
+            'default': QColor("#000000"),
+        }
+
+    def _val_color(self, colors, value):
+        if '#' in value:
+            return colors['var']
+        stripped = value.strip()
+        if stripped.isdigit() or (',' in stripped and all(x.strip().isdigit() for x in stripped.split(','))):
+            return colors['num']
+        return colors['default']
+
+    def paint(self, painter, option, index):
+        data = index.data(Qt.ItemDataRole.UserRole)
+        if not data or data[0] != 'key':
+            super().paint(painter, option, index)
+            return
+
+        # Cópia segura do option para não corromper o objeto C++ original
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+
+        widget = opt.widget
+        style = widget.style() if widget else QApplication.style()
+
+        painter.save()
+
+        # Desenha fundo (seleção, hover) sem o texto
+        opt.text = ''
+        style.drawControl(QStyle.ControlElement.CE_ItemViewItem, opt, painter, widget)
+
+        text_rect = style.subElementRect(QStyle.SubElement.SE_ItemViewItemText, opt, widget)
+        text = index.data(Qt.ItemDataRole.DisplayRole) or ''
+        is_selected = bool(opt.state & QStyle.StateFlag.State_Selected)
+
+        colors = self._colors()
+
+        if '=' in text:
+            eq_pos = text.index('=')
+            key_part = text[:eq_pos].rstrip() + ' '
+            eq_part = '= '
+            val_part = text[eq_pos + 1:].strip()
+        else:
+            key_part = text
+            eq_part = ''
+            val_part = ''
+
+        painter.setFont(opt.font)
+        fm = painter.fontMetrics()
+        x = text_rect.x() + 2
+        y = text_rect.y() + (text_rect.height() - fm.height()) // 2 + fm.ascent()
+
+        def draw(txt, color):
+            nonlocal x
+            c = QColor("#ffffff") if is_selected else color
+            painter.setPen(c)
+            painter.drawText(x, y, txt)
+            x += fm.horizontalAdvance(txt)
+
+        draw(key_part, colors['key'])
+        draw(eq_part, colors['default'])
+        draw(val_part, self._val_color(colors, val_part))
+
+        painter.restore()
 
 
 class IniEditor(QMainWindow):
@@ -218,6 +305,7 @@ class IniEditor(QMainWindow):
         self.tree.itemClicked.connect(self.on_item_clicked)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self.show_context_menu)
+        self.tree.setItemDelegate(KeyValueDelegate(self))
         left_layout.addWidget(self.tree)
         
         self.splitter.addWidget(left_panel)
@@ -305,13 +393,21 @@ class IniEditor(QMainWindow):
         # Aba 3: Variáveis Globais (@Resources)
         self.var_widget = QWidget()
         var_layout = QVBoxLayout(self.var_widget)
-        self.var_label = QLabel("; Variáveis Globais\n[Variables]")
+
+        # Seletor de arquivo .inc
+        var_file_row = QHBoxLayout()
+        var_file_row.addWidget(QLabel(_("Arquivo:")))
+        self.var_file_combo = QComboBox()
+        self.var_file_combo.setMinimumWidth(220)
+        self.var_file_combo.currentIndexChanged.connect(self._on_var_file_selected)
+        var_file_row.addWidget(self.var_file_combo, 1)
+        var_layout.addLayout(var_file_row)
+
         self.var_editor = RainmeterEdit()
-        self.var_editor.setPlaceholderText(_('O arquivo Variables.inc será carregado aqui se for encontrado...'))
+        self.var_editor.setPlaceholderText(_('Selecione um arquivo .inc acima...'))
         self.var_highlighter = IniHighlighter(self.var_editor.document(), dark_mode=self.dark_mode)
-        var_layout.addWidget(self.var_label)
         var_layout.addWidget(self.var_editor)
-        
+
         self.btn_save_vars = QPushButton(_("Salvar Variáveis Globais"))
         self.btn_save_vars.clicked.connect(self.save_variables_file)
         var_layout.addWidget(self.btn_save_vars)
@@ -674,38 +770,32 @@ class IniEditor(QMainWindow):
             self.asset_tab.set_resources_path(None)
 
 
-        if self.var_file:
-            var_content = ""
-            var_success = False
-            for enc in encodings:
-                try:
-                    with open(self.var_file, 'r', encoding=enc) as f:
-                        var_content = f.read()
-                    var_success = True
-                    break
-                except UnicodeDecodeError:
-                    continue
-            
-            if var_success:
-                self.var_editor.setPlainText(var_content)
-                self.btn_save_vars.setEnabled(True)
-                self.add_skin_action.setEnabled(True)
-                # Corrigir bug: Usar o índice real da aba de variáveis
-                var_idx = self.tabs.indexOf(self.var_widget)
-                if var_idx != -1:
-                    self.tabs.setTabText(var_idx, f"Variáveis ({os.path.basename(self.var_file)})")
-            else:
-                self.var_editor.setPlainText(f"Erro ao ler encoding de {self.var_file}")
-                self.btn_save_vars.setEnabled(False)
-                self.add_skin_action.setEnabled(True) # O projeto existe, só falhou a leitura
+        # Preencher combobox com todos os .inc em @Resources
+        inc_files = find_inc_files(file_path)
+        self.var_file_combo.blockSignals(True)
+        self.var_file_combo.clear()
+        for inc_path in inc_files:
+            self.var_file_combo.addItem(os.path.basename(inc_path), inc_path)
+        self.var_file_combo.blockSignals(False)
+
+        if inc_files:
+            self.add_skin_action.setEnabled(True)
+            # Selecionar Variables.inc por padrão, se existir
+            default_idx = 0
+            if self.var_file:
+                for i in range(self.var_file_combo.count()):
+                    if self.var_file_combo.itemData(i) == self.var_file:
+                        default_idx = i
+                        break
+            self.var_file_combo.setCurrentIndex(default_idx)
+            self._on_var_file_selected(default_idx)
         else:
-            self.var_editor.setPlainText("Variables.inc não encontrado nesta skin.")
+            self.var_editor.setPlainText(_("Nenhum arquivo .inc encontrado em @Resources."))
             self.btn_save_vars.setEnabled(False)
-            self.add_skin_action.setEnabled(False)
-            # Tentar encontrar a aba de variáveis para resetar o texto
+            self.add_skin_action.setEnabled(False if not self.var_file else True)
             var_idx = self.tabs.indexOf(self.var_widget)
             if var_idx != -1:
-                self.tabs.setTabText(var_idx, "Variáveis Globais")
+                self.tabs.setTabText(var_idx, _("Variáveis Globais"))
 
     def update_tree(self):
         self.tree.clear()
@@ -778,15 +868,6 @@ class IniEditor(QMainWindow):
                 display_text = f'{key} = {value}'
                 key_item = QTreeWidgetItem([display_text])
                 key_item.setData(0, Qt.ItemDataRole.UserRole, ('key', section_name, key))
-                
-                # Cores básicas
-                key_item.setForeground(0, default_text_color)
-                
-                if '#' in value:
-                    key_item.setForeground(0, color_var)
-                elif value.isdigit() or (',' in value and all(x.strip().isdigit() for x in value.split(','))):
-                    key_item.setForeground(0, color_num)
-                
                 section_item.addChild(key_item)
 
         # Adicionar seção DEFAULT se existir
@@ -800,10 +881,6 @@ class IniEditor(QMainWindow):
                 display_text = f'{key} = {value}'
                 key_item = QTreeWidgetItem([display_text])
                 key_item.setData(0, Qt.ItemDataRole.UserRole, ('key', 'DEFAULT', key))
-                
-                if '#' in value:
-                    key_item.setForeground(0, color_var)
-                
                 default_item.addChild(key_item)
 
         self.tree.expandAll()
@@ -1199,25 +1276,8 @@ class IniEditor(QMainWindow):
                 else:
                     self.config.set(section, key, new_value)
                 
-                # Atualizar o texto exibido na árvore
+                # Atualizar o texto exibido na árvore (o delegate recoloriza automaticamente)
                 self.current_item.setText(0, f'{key} = {new_value}')
-                
-                # Atualizar a cor na árvore proporcionalmente ao conteúdo
-                if self.dark_mode:
-                    color_var = QColor("#4ec9b0")
-                    color_num = QColor("#b5cea8")
-                    default_text_color = QColor("#cccccc")
-                else:
-                    color_var = QColor("#008080")
-                    color_num = QColor("#008000")
-                    default_text_color = QColor("#000000")
-                
-                if '#' in new_value:
-                    self.current_item.setForeground(0, color_var)
-                elif new_value.isdigit() or (',' in new_value and all(x.strip().isdigit() for x in new_value.split(','))):
-                    self.current_item.setForeground(0, color_num)
-                else:
-                    self.current_item.setForeground(0, default_text_color)
 
     def push_value_command(self):
         if not self.current_item or sip.isdeleted(self.current_item):
@@ -1338,6 +1398,29 @@ class IniEditor(QMainWindow):
                 QMessageBox.information(self, "Sucesso", f"Skin exportada com sucesso!\nSalva em: {result}")
             else:
                 QMessageBox.critical(self, "Erro", f"Falha ao exportar skin: {result}")
+
+    def _on_var_file_selected(self, index):
+        if index < 0:
+            return
+        file_path = self.var_file_combo.itemData(index)
+        if not file_path:
+            return
+        encodings = ['utf-8-sig', 'utf-16', 'cp1252', 'latin-1']
+        for enc in encodings:
+            try:
+                with open(file_path, 'r', encoding=enc) as f:
+                    content = f.read()
+                self.var_file = file_path
+                self.var_editor.setPlainText(content)
+                self.btn_save_vars.setEnabled(True)
+                var_idx = self.tabs.indexOf(self.var_widget)
+                if var_idx != -1:
+                    self.tabs.setTabText(var_idx, f"Variáveis ({os.path.basename(file_path)})")
+                return
+            except (UnicodeDecodeError, OSError):
+                continue
+        self.var_editor.setPlainText(f"Erro ao ler: {file_path}")
+        self.btn_save_vars.setEnabled(False)
 
     def save_variables_file(self):
         if hasattr(self, 'var_file') and self.var_file:
@@ -1655,14 +1738,22 @@ class IniEditor(QMainWindow):
         
         if data[0] == 'section':
             section_name = data[1]
+            add_key_action = menu.addAction(_('Adicionar Chave'))
+            add_section_action = menu.addAction(_('Adicionar Seção'))
+            menu.addSeparator()
             rename_action = menu.addAction(_('Renomear Seção'))
             dup_action = menu.addAction(_('Duplicar Item'))
             del_action = menu.addAction(_('Excluir Item'))
             menu.addSeparator()
             add_comment_action = menu.addAction(_('Adicionar Comentário na Seção'))
-            
+
             action = menu.exec(self.tree.mapToGlobal(position))
-            if action == rename_action:
+            if action == add_key_action:
+                self.tree.setCurrentItem(item)
+                self.add_key()
+            elif action == add_section_action:
+                self.add_section()
+            elif action == rename_action:
                 self.rename_section()
             elif action == dup_action:
                 self.duplicate_item()
@@ -1672,13 +1763,21 @@ class IniEditor(QMainWindow):
                 self._prompt_add_comment(section_name)
 
         elif data[0] == 'key':
+            add_key_action = menu.addAction(_('Adicionar Chave'))
+            add_section_action = menu.addAction(_('Adicionar Seção'))
+            menu.addSeparator()
             dup_action = menu.addAction(_('Duplicar Item'))
             del_action = menu.addAction(_('Excluir Item'))
             menu.addSeparator()
             add_comment_action = menu.addAction(_('Adicionar Comentário Acima'))
-            
+
             action = menu.exec(self.tree.mapToGlobal(position))
-            if action == dup_action:
+            if action == add_key_action:
+                self.tree.setCurrentItem(item)
+                self.add_key()
+            elif action == add_section_action:
+                self.add_section()
+            elif action == dup_action:
                 self.duplicate_item()
             elif action == del_action:
                 self.delete_item(item_to_delete=item)
@@ -1688,11 +1787,15 @@ class IniEditor(QMainWindow):
 
         elif data[0] == 'comment':
             _kind, section_name, line_idx = data
+            add_section_action = menu.addAction(_('Adicionar Seção'))
+            menu.addSeparator()
             del_comment_action = menu.addAction(_('Excluir Comentário'))
             add_comment_action = menu.addAction(_('Adicionar Comentário Acima'))
-            
+
             action = menu.exec(self.tree.mapToGlobal(position))
-            if action == del_comment_action:
+            if action == add_section_action:
+                self.add_section()
+            elif action == del_comment_action:
                 cmd = DeleteCommentCommand(self, line_idx)
                 self.undo_stack.push(cmd)
             elif action == add_comment_action:

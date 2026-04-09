@@ -12,15 +12,40 @@ def find_variables_file(skin_file):
             var_file = os.path.join(resources_path, 'Variables.inc')
             if os.path.exists(var_file):
                 return var_file
-        
+
         # Se chegarmos no nível da pasta 'Skins', paramos
         if os.path.split(path)[1].lower() == 'skins':
             break
-        
+
         new_path = os.path.dirname(path)
         if new_path == path: break
         path = new_path
     return None
+
+def find_resources_dir(skin_file):
+    """Retorna o caminho da pasta @Resources para o arquivo de skin informado."""
+    path = os.path.dirname(skin_file)
+    while path and len(os.path.split(path)[1]) > 0:
+        resources_path = os.path.join(path, '@Resources')
+        if os.path.isdir(resources_path):
+            return resources_path
+        if os.path.split(path)[1].lower() == 'skins':
+            break
+        new_path = os.path.dirname(path)
+        if new_path == path: break
+        path = new_path
+    return None
+
+def find_inc_files(skin_file):
+    """Retorna lista de caminhos de arquivos .inc dentro de @Resources."""
+    resources_dir = find_resources_dir(skin_file)
+    if not resources_dir:
+        return []
+    return sorted(
+        os.path.join(resources_dir, f)
+        for f in os.listdir(resources_dir)
+        if f.lower().endswith('.inc')
+    )
 
 def refresh_skin(skin_file):
     if not skin_file:
