@@ -184,57 +184,59 @@ class SnippetManager(QWidget):
         self.dark_mode = dark_mode
         self.snippets = {
             "Meters": {
-                # String - o mais usado
-                "Texto Básico (String)": "[MeterText]\nMeter=String\nX=10\nY=10\nW=200\nH=30\nText=Olá Mundo\nFontFace=Segoe UI\nFontSize=14\nFontColor=255,255,255,220\nAntiAlias=1\nDynamicVariables=1\nStringAlign=LeftCenter",
-                "Texto com Medida + %": "[MeterCPU]\nMeter=String\nMeasureName=MeasureCPU\nX=0\nY=0\nText=CPU: %1%\nFontColor=#FontColor#\nFontSize=#FontSize#\nPercentual=1\nNumOfDecimals=1\nClipString=1\nAntiAlias=1\nDynamicVariables=1",
-                "Texto com Inline (cor dinâmica)": "[MeterInline]\nMeter=String\nText=Normal {#AccentColor#}Destaque{#FontColor#} Normal\nInlineSetting=Color | #AccentColor#\nInlinePattern=.*Destaque.*\nInlineSetting2=Bold\nInlinePattern2=.*Destaque.*\nAntiAlias=1",
-                "Texto Clip + Auto-Wrap": "[MeterLongText]\nMeter=String\nX=10\nY=10\nW=300\nH=80\nText=Texto muito longo que deve quebrar ou truncar\nClipString=2\nDynamicWindowSize=1\nAntiAlias=1",
+                "Texto Basico (String)": "[MeterText]\nMeter=String\nX=10\nY=10\nW=220\nH=32\nText=Ola Mundo\nFontFace=#FontFace#\nFontSize=#FontSize#\nFontColor=#FontColor#\nAntiAlias=1\nDynamicVariables=1\nStringAlign=LeftCenter\nClipString=1",
+                "Texto com Medida + %": "[MeterCPU]\nMeter=String\nMeasureName=MeasureCPU\nX=0\nY=0\nW=180\nH=24\nText=CPU: %1%%\nFontColor=#FontColor#\nFontSize=#FontSize#\nFontFace=#FontFace#\nPercentual=1\nNumOfDecimals=1\nClipString=1\nAntiAlias=1\nDynamicVariables=1",
+                "Texto com Inline": "[MeterInline]\nMeter=String\nX=10\nY=10\nW=260\nH=28\nText=Normal Destaque Normal\nFontColor=#FontColor#\nFontFace=#FontFace#\nFontSize=#FontSize#\nInlineSetting=Color | #AccentColor#\nInlinePattern=Destaque\nInlineSetting2=Bold\nInlinePattern2=Destaque\nAntiAlias=1\nDynamicVariables=1",
+                "Texto Clip + Auto-Wrap": "[MeterLongText]\nMeter=String\nX=10\nY=10\nW=300\nH=80\nText=Texto muito longo que deve quebrar ou truncar de forma controlada.\nFontFace=#FontFace#\nFontSize=#FontSize#\nFontColor=#FontColor#\nClipString=2\nDynamicWindowSize=1\nAntiAlias=1",
 
-                # Image
-                "Imagem Simples": "[MeterImage]\nMeter=Image\nImageName=#@#icons\\app.png\nX=5\nY=5\nW=64\nH=64\nPreserveAspectRatio=1\nAntiAlias=1",
-                "Imagem com Máscara": "[MeterMasked]\nMeter=Image\nImageName=#@#photo.jpg\nMaskImageName=#@#circle-mask.png\nX=0\nY=0\nW=100\nH=100\nPreserveAspectRatio=1",
+                "Imagem Simples": "[MeterImage]\nMeter=Image\nImageName=#@#Icons\\app.png\nX=5\nY=5\nW=64\nH=64\nPreserveAspectRatio=1\nAntiAlias=1\nDynamicVariables=1",
+                "Imagem com Mascara": "[MeterMasked]\nMeter=Image\nImageName=#@#Images\\photo.jpg\nMaskImageName=#@#Images\\circle-mask.png\nX=0\nY=0\nW=100\nH=100\nPreserveAspectRatio=1\nAntiAlias=1\nDynamicVariables=1",
 
-                # Bar
-                "Barra Horizontal Simples": "[MeterBar]\nMeter=Bar\nMeasureName=MeasureRAM\nX=10\nY=10\nW=180\nH=12\nBarColor=0,180,255,255\nSolidColor=50,50,50,180\nBarOrientation=Horizontal\nAntiAlias=1",
+                "Barra Horizontal Simples": "[MeterBar]\nMeter=Bar\nMeasureName=MeasureRAM\nX=10\nY=10\nW=180\nH=12\nBarColor=#AccentColor#\nSolidColor=50,50,50,180\nBarOrientation=Horizontal\nAntiAlias=1\nDynamicVariables=1",
 
-                # Shape - moderno e poderoso
-                "Retângulo Arredondado (Background)": "[MeterBG]\nMeter=Shape\nShape=Rectangle 0,0,300,80,15 | Fill Color 30,30,40,220 | StrokeWidth 2 | Stroke Color 80,80,100,150\nX=0\nY=0\nW=300\nH=80\nAntiAlias=1",
-                "Círculo (Ícone/Botão)": "[MeterCircle]\nMeter=Shape\nShape=Ellipse 50,50,40 | Fill Color 0,120,255,220 | StrokeWidth 3 | Stroke Color 255,255,255,180\nX=0\nY=0\nW=100\nH=100\nAntiAlias=1",
-                "Gauge Arco Circular": "[MeterArcGauge]\nMeter=Shape\nX=0\nY=0\nW=120\nH=120\nShape=Arc 60,60,60,60,0,0,0,0,0,1 | StrokeWidth 12 | Stroke Color 60,60,60,255\nShape2=Arc 60,60,60,60,[&StartAngle],[&SweepAngle],0,0,0,1 | StrokeWidth 12 | Stroke Color 0,200,255,255\nDynamicVariables=1",
-                "Botão com Gradiente": "[MeterButton]\nMeter=Shape\nShape=Rectangle 0,0,140,40,12 | Fill LinearGradient Grad | StrokeWidth 1 | Stroke Color 100,100,255,180\nGrad=90 | 50,100,255,255;0.0 | 100,200,255,255;1.0\nAntiAlias=1",
+                "Roundline Basico": "[MeterRoundline]\nMeter=Roundline\nMeasureName=MeasureCPU\nX=10\nY=10\nW=120\nH=120\nStartAngle=0\nRotationAngle=360\nLineStart=20\nLineLength=40\nLineWidth=8\nLineColor=#AccentColor#\nSolid=1\nAntiAlias=1\nDynamicVariables=1",
+                "Roundline Gauge de Progresso": "[MeterRoundGauge]\nMeter=Roundline\nMeasureName=MeasureRAM\nX=0\nY=0\nW=140\nH=140\nStartAngle=225\nRotationAngle=270\nLineStart=30\nLineLength=45\nLineWidth=10\nLineColor=#AccentColor#\nSolid=1\nAntiAlias=1\nDynamicVariables=1",
+                "Roundline Segmentado": "[MeterRoundSegments]\nMeter=Roundline\nMeasureName=MeasureDisk\nX=0\nY=0\nW=150\nH=150\nStartAngle=0\nRotationAngle=360\nLineStart=25\nLineLength=40\nLineWidth=6\nLineColor=255,170,0,255\nSolid=0\nAntiAlias=1\nDynamicVariables=1",
+                "Roundline com Fundo": "[MeterRoundBg]\nMeter=Roundline\nX=0\nY=0\nW=140\nH=140\nStartAngle=225\nRotationAngle=270\nLineStart=28\nLineLength=44\nLineWidth=10\nLineColor=50,50,60,180\nSolid=1\nAntiAlias=1\n\n[MeterRoundValue]\nMeter=Roundline\nMeasureName=MeasureCPU\nX=r\nY=r\nW=140\nH=140\nStartAngle=225\nRotationAngle=270\nLineStart=28\nLineLength=44\nLineWidth=10\nLineColor=#AccentColor#\nSolid=1\nAntiAlias=1\nDynamicVariables=1",
+
+                "Retangulo Arredondado (Background)": "[MeterBG]\nMeter=Shape\nShape=Rectangle 0,0,300,80,15 | Fill Color #BGColor# | StrokeWidth 2 | Stroke Color 80,80,100,150\nX=0\nY=0\nW=300\nH=80\nAntiAlias=1\nDynamicVariables=1",
+                "Circulo (Icone/Botao)": "[MeterCircle]\nMeter=Shape\nShape=Ellipse 50,50,40 | Fill Color 0,120,255,220 | StrokeWidth 3 | Stroke Color 255,255,255,180\nX=0\nY=0\nW=100\nH=100\nAntiAlias=1",
+                "Gauge Arco Circular": "[MeterArcGauge]\nMeter=Shape\nX=0\nY=0\nW=120\nH=120\nShape=Arc 60,60,60,60,0,0,0,0,0,1 | StrokeWidth 12 | Stroke Color 60,60,60,255\nShape2=Arc 60,60,60,60,[&StartAngle],[&SweepAngle],0,0,0,1 | StrokeWidth 12 | Stroke Color #AccentColor#\nDynamicVariables=1",
+                "Botao com Gradiente": "[MeterButton]\nMeter=Shape\nShape=Rectangle 0,0,140,40,12 | Fill LinearGradient Grad | StrokeWidth 1 | Stroke Color 100,100,255,180\nGrad=90 | 50,100,255,255;0.0 | 100,200,255,255;1.0\nAntiAlias=1"
             },
             "Measures": {
                 "CPU Uso Total": "[MeasureCPU]\nMeasure=CPU\nProcessor=0\nMinValue=0\nMaxValue=100\nUpdateDivider=1",
-                "RAM Usada (%)": "[MeasureRAM]\nMeasure=PhysicalMemory\nUpdateDivider=5",
-                "Relógio Digital": "[MeasureTime]\nMeasure=Time\nFormat=%H:%M:%S\nTimeZone=Local",
+                "RAM Usada (%)": "[MeasureRAM]\nMeasure=PhysicalMemory\nMinValue=0\nMaxValue=100\nUpdateDivider=5",
+                "Relogio Digital": "[MeasureTime]\nMeasure=Time\nFormat=%H:%M:%S\nTimeZone=Local",
                 "Data Completa": "[MeasureDate]\nMeasure=Time\nFormat=%A, %d %B %Y",
-                "Cálculo Simples": "[MeasureCalc]\nMeasure=Calc\nFormula=[MeasureCPU] * 2\nDynamicVariables=1",
-                "Espaço Livre Disco C:": "[MeasureDisk]\nMeasure=FreeDiskSpace\nDrive=C:\\\nUnit=GB\nMinValue=0\nMaxValue=Total",
+                "Calculo Simples": "[MeasureCalc]\nMeasure=Calc\nFormula=Clamp([MeasureCPU] * 2, 0, 100)\nMinValue=0\nMaxValue=100\nDynamicVariables=1",
+                "Espaco Livre Disco C:": "[MeasureDisk]\nMeasure=FreeDiskSpace\nDrive=C:\\\nUnit=GB\nMinValue=0\nMaxValue=Total",
                 "Rede Download (NetIn)": "[MeasureNetIn]\nMeasure=NetIn\nInterface=Best\nCumulative=0",
                 "Plugin Exemplo (Lua)": "[MeasureLua]\nMeasure=Plugin\nPlugin=LuaScript\nScriptFile=#@#Scripts\\main.lua",
-                "WebParser - Título da Página": "[MeasureWebTitle]\nMeasure=WebParser\nURL=https://www.google.com\nRegExp=<title>(.*?)</title>",
+                "WebParser - Titulo da Pagina": "[MeasureWebTitle]\nMeasure=WebParser\nURL=https://www.google.com\nRegExp=<title>(.*?)</title>",
                 "Registry - Valor de Registro": "[MeasureRegistry]\nMeasure=Registry\nRegHKEY=HKEY_CURRENT_USER\nRegKey=\nRegPath=Software\\Rainmeter\nRegValue=AccentColor",
-                "Process - Uso de CPU": "[MeasureProcess]\nMeasure=Process\nProcessName=chrome.exe\nMeasureName=MeasureCPU\nUpdateDivider=1\nSubstitute=\"-1\":\"not running\",\"1\":\"running\""
-
+                "Process - Uso de CPU": "[MeasureProcess]\nMeasure=Process\nProcessName=chrome.exe\nUpdateDivider=1\nSubstitute=\"-1\":\"not running\",\"1\":\"running\""
             },
             "Templates": {
-                "Estrutura Básica Completa": "[Rainmeter]\nUpdate=1000\nAccurateText=1\nDynamicWindowSize=1\nBackgroundMode=2\nSolidColor=0,0,0,1\n\n[Variables]\nFontColor=255,255,255,220\nAccentColor=0,180,255,255\nBGColor=30,30,40,200\nFontFace=Segoe UI\nFontSize=13\n\n[@Include]\n@Include=#@#Variables.inc\n\n[MeterBackground]\nMeter=Shape\nShape=Rectangle 0,0,280,180,20 | Fill Color #BGColor#\nAntiAlias=1",
+                "Estrutura Basica Completa": "[Rainmeter]\nUpdate=1000\nAccurateText=1\nDynamicWindowSize=1\nBackgroundMode=2\nSolidColor=0,0,0,1\n\n[Variables]\nFontColor=255,255,255,220\nAccentColor=0,180,255,255\nBGColor=30,30,40,200\nFontFace=Segoe UI\nFontSize=13\n\n[@Include]\n@Include=#@#Variables.inc\n\n[MeterBackground]\nMeter=Shape\nShape=Rectangle 0,0,280,180,20 | Fill Color #BGColor#\nW=280\nH=180\nAntiAlias=1\nDynamicVariables=1",
+                "Gauge Roundline Animado": "[Rainmeter]\nUpdate=1000\nAccurateText=1\nDynamicWindowSize=1\n\n[Variables]\nAccentColor=0,180,255,255\nTrackColor=45,45,55,180\nFontColor=235,235,245,255\nFontFace=Segoe UI\nFontSize=14\nGaugeSize=160\nRingStart=34\nRingLength=48\nRingWidth=10\n\n[MeasureCPU]\nMeasure=CPU\nProcessor=0\nMinValue=0\nMaxValue=100\nUpdateDivider=1\n\n[MeasureSweep]\nMeasure=Calc\nFormula=([MeasureCPU] * 2.7)\nMinValue=0\nMaxValue=270\nDynamicVariables=1\n\n[MeterTrack]\nMeter=Roundline\nX=0\nY=0\nW=#GaugeSize#\nH=#GaugeSize#\nStartAngle=225\nRotationAngle=270\nLineStart=#RingStart#\nLineLength=#RingLength#\nLineWidth=#RingWidth#\nLineColor=#TrackColor#\nSolid=1\nAntiAlias=1\nDynamicVariables=1\n\n[MeterValue]\nMeter=Roundline\nMeasureName=MeasureCPU\nX=r\nY=r\nW=#GaugeSize#\nH=#GaugeSize#\nStartAngle=225\nRotationAngle=270\nLineStart=#RingStart#\nLineLength=#RingLength#\nLineWidth=#RingWidth#\nLineColor=#AccentColor#\nSolid=1\nAntiAlias=1\nDynamicVariables=1\n\n[MeterLabel]\nMeter=String\nMeasureName=MeasureCPU\nX=(#GaugeSize#/2)\nY=(#GaugeSize#/2)\nStringAlign=CenterCenter\nText=%1%%\nFontFace=#FontFace#\nFontSize=#FontSize#\nFontColor=#FontColor#\nAntiAlias=1\nDynamicVariables=1",
                 "Tema Dark Moderno": "[Variables]\nFontColor=220,220,230,255\nAccent=100,180,255,255\nBG=25,25,35,220\nShadow=0,0,0,120\n\n[MeterShadow]\nMeter=Shape\nShape=Rectangle 5,5,270,170,18 | Fill Color #Shadow#\nBlur=1\nBlurRadius=8",
-                "Container + Scroll": "[MeterContainer]\nMeter=Shape\nShape=Rectangle 0,0,250,400 | Fill Color 0,0,0,1\nW=250\nH=400\nAntiAlias=1\n\n[MeterContent]\nMeter=String\nContainer=MeterContainer\nY=r\nDynamicVariables=1",
+                "Container + Scroll": "[MeterContainer]\nMeter=Shape\nShape=Rectangle 0,0,250,400 | Fill Color 0,0,0,1\nW=250\nH=400\nAntiAlias=1\n\n[MeterContent]\nMeter=String\nContainer=MeterContainer\nY=r\nDynamicVariables=1"
             },
-            "Ações & Interatividade": {
+            "Acoes & Interatividade": {
                 "Clique Simples (Abrir Site)": "LeftMouseUpAction=[\"https://www.google.com\"]",
                 "Toggle Skin": "LeftMouseUpAction=[!ToggleConfig \"MinhaSuite\\Relogio\" \"Relogio.ini\"]",
                 "Hover Highlight": "MouseOverAction=[!SetOption MeterText FontColor \"255,220,100,255\"][!UpdateMeter MeterText][!Redraw]\nMouseLeaveAction=[!SetOption MeterText FontColor \"#FontColor#\"][!UpdateMeter MeterText][!Redraw]",
-                "Scroll Ajusta Variável": "MouseScrollUpAction=[!SetVariable Scale \"(#Scale# + 0.1)\"][!Update]\nMouseScrollDownAction=[!SetVariable Scale \"(#Scale# - 0.1)\"][!Update]",
-                "Atualizar Variável Permanente": "LeftMouseUpAction=[!WriteKeyValue Variables AccentColor \"255,100,100\" \"#@#Variables.inc\"][!Refresh]",
+                "Scroll Ajusta Variavel": "MouseScrollUpAction=[!SetVariable Scale \"(#Scale# + 0.1)\"][!Update]\nMouseScrollDownAction=[!SetVariable Scale \"(#Scale# - 0.1)\"][!Update]",
+                "Atualizar Variavel Permanente": "LeftMouseUpAction=[!WriteKeyValue Variables AccentColor \"255,100,100\" \"#@#Variables.inc\"][!Refresh]"
             },
-            "Variáveis Comuns": {
+            "Variaveis Comuns": {
                 "Bloco de Cores": "[Variables]\nFontColor=235,235,245,255\nAccent=80,200,255,255\nBG=18,18,28,220\nBorder=60,60,80,150",
                 "Tamanhos Globais": "[Variables]\nScale=1.0\nFontSize=14\nIconSize=48\nPadding=12",
-                "Caminhos": "[Variables]\n@=#@#\nImg=#@#Images\\\nFonts=#@#Fonts\\\nScripts=#@#Scripts\\",
+                "Caminhos": "[Variables]\n@=#@#\nImg=#@#Images\\\nFonts=#@#Fonts\\\nScripts=#@#Scripts\\"
             }
         }
+
         self.init_ui()
 
     def init_ui(self):
