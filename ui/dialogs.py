@@ -1,4 +1,5 @@
 import os
+import utils
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, 
     QComboBox, QLabel, QTextEdit, QDialogButtonBox, QFileDialog, QMessageBox,
@@ -634,10 +635,8 @@ class ShapeEditorDialog(QDialog):
                 self.stroke_color = mod[12:].strip()
                 self.stroke_edit.setText(self.stroke_color)
             elif lmod.startswith("strokewidth"):
-                try: 
-                    self.stroke_width = float(mod[11:].strip())
-                    self.width_spin.setValue(self.stroke_width)
-                except: pass
+                self.stroke_width = utils.safe_float(mod[11:].strip(), default=1.0)
+                self.width_spin.setValue(self.stroke_width)
         
         self.update_preview()
 
@@ -660,11 +659,10 @@ class ShapeEditorDialog(QDialog):
 
     def update_color_buttons(self):
         def set_btn_color(btn, color_str):
-            parts = [p.strip() for p in color_str.split(',')]
-            bg = "white"
-            if len(parts) >= 3:
-                try: bg = f"rgb({parts[0]},{parts[1]},{parts[2]})"
-                except: pass
+            color = utils.parse_color(color_str)
+            bg = "transparent"
+            if color:
+                bg = f"rgb({color.red()},{color.green()},{color.blue()})"
             btn.setStyleSheet(f"background-color: {bg}; border: 1px solid #888; border-radius: 2px;")
             
         set_btn_color(self.fill_btn, self.fill_edit.text())
@@ -679,13 +677,9 @@ class ShapeEditorDialog(QDialog):
         if color: self.stroke_edit.setText(color)
 
     def _open_picker(self, current):
-        initial = QColor(255, 255, 255)
-        parts = [p.strip() for p in current.split(',')]
-        if len(parts) >= 3:
-            try: 
-                a = int(parts[3]) if len(parts) == 4 else 255
-                initial = QColor(int(parts[0]), int(parts[1]), int(parts[2]), a)
-            except: pass
+        color = utils.parse_color(current)
+        if color:
+            initial = color
             
         color = QColorDialog.getColor(initial, self, "Selecionar Cor", QColorDialog.ColorDialogOption.ShowAlphaChannel)
         if color.isValid():

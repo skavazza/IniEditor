@@ -15,6 +15,12 @@
 - [x] **Gerador de Bangs:** Ferramenta visual para construir comandos complexos como `!SetOption` ou `!SetVariable` sem precisar decorar a sintaxe.
 - [x] **Gerenciador de Ativos:** Galeria visual para navegar e inserir imagens da pasta `@Resources` diretamente no código.
 - [x] **Snippets (Modelos):** Biblioteca de blocos de código prontos (Meters, Measures e Templates) para inserção rápida.
+- [x] **Estabilização e UX:**
+    - [x] Menu **"Fechar"** e **"Sair"** com atalhos e avisos de alterações não salvas.
+    - [x] Correção no gerenciamento de encodings (conversão para UTF-8).
+    - [x] Tratamento de erros profissional (substituição de `except: pass` por logging estruturado).
+    - [x] Suíte inicial de **testes unitários** (Lógica e Gerenciamento de Projetos).
+    - [x] Alinhamento do `requirements.txt` com as dependências do projeto (`Pillow`).
 
 ---
 
@@ -54,16 +60,16 @@ Estamos transformando o editor de código em um **Editor Visual (WYSIWYG)** comp
 ## 🚀 Fase 3 (v3.0 - Ferramentas de Design Avançadas)
 
 ### 1. Elementos e Ferramentas Dinâmicas
-- [ ] **Elemento Rotator:** Suporte visual para meters do tipo Rotator com controle de centro e ângulo.
-- [ ] **Unidades Percentuais:** Suporte para posições e tamanhos relativos (ex: `X=50%`).
+- [x] **Elemento Rotator:** Suporte visual para meters do tipo Rotator com controle de centro e ângulo.
+- [x] **Unidades Percentuais:** Suporte para posições e tamanhos relativos (ex: `X=50%`).
 - [x] **Controles de Zoom:** Lupa para zoom in/out e botão "Ajustar à Tela" no Canvas.
 
 ### 2. Precisão e Alinhamento
 - [x] **Grid e Snap-to-Grid:** Grade visual com encaixe automático dos elementos.
-- [ ] **Ferramentas de Alinhamento:** Botões para alinhar múltiplos itens (Esquerda, Centro, Topo, Distribuir).
-- [ ] **Indicadores de Dimensão:** Exibir coordenadas (X, Y) e tamanho (W, H) flutuantes durante o arraste.
+- [x] **Ferramentas de Alinhamento:** Botões para alinhar múltiplos itens (Esquerda, Centro, Topo, Distribuir).
+- [x] **Indicadores de Dimensão:** Exibir coordenadas (X, Y) e tamanho (W, H) flutuantes durante o arraste.
 
 ### 3. Usabilidade e Polimento
-- [ ] **Multi-seleção:** Selecionar e mover múltiplos elementos de uma vez (Ctrl+Click / Rubberband).
-- [ ] **Barra de Status:** Informações contextuais e coordenadas do mouse no rodapé.
-- [ ] **Janela de Ajuda/Sobre:** Guia de atalhos e documentação integrada.
+- [x] **Multi-seleção:** Selecionar e mover múltiplos elementos de uma vez (Ctrl+Click / Rubberband Drag).
+- [x] **Barra de Status:** Informações contextuais e coordenadas do mouse no rodapé.
+- [x] **Janela de Ajuda/Sobre:** Guia de atalhos e documentação integrada.

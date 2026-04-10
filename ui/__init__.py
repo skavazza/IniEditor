@@ -3,7 +3,9 @@ from .code_editor import RainmeterEdit
 from .canvas import VisualCanvas
 from .panels import LayerPanel, PropertyPanel
 from .dialogs import ShapeEditorDialog, BangGeneratorDialog, RmskinExportDialog, NewSkinDialog, AddSkinDialog, PreferencesDialog, AutocompleteInputDialog, HelpDialog
-from .managers import AssetManager, SnippetManager, FontManager, LogViewer
+from .managers import AssetManager, SnippetManager, FontManager
+from .log_viewer import LogViewer
+from .main_window import IniEditor
 
 __all__ = [
     'IniHighlighter',
@@ -21,5 +23,6 @@ __all__ = [
     'AssetManager',
     'SnippetManager',
     'FontManager',
-    'LogViewer'
+    'LogViewer',
+    'IniEditor'
 ]

@@ -8,6 +8,7 @@ from PyQt6.QtCore import Qt, QPointF, QRectF
 from PyQt6.QtGui import QTextOption
 from PyQt6.QtGui import QColor, QPixmap, QFont, QPen, QBrush, QPainter, QTransform, QPainterPath
 from PyQt6.QtWidgets import QGraphicsColorizeEffect
+import utils
 
 class VisualMeterItem(QGraphicsRectItem):
     """Base class for Rainmeter visual items, providing background support (SolidColor)."""
@@ -37,7 +38,8 @@ class VisualMeterItem(QGraphicsRectItem):
                             x = round(value.x() / grid) * grid
                             y = round(value.y() / grid) * grid
                             return QPointF(x, y)
-                except: pass
+                except Exception as e:
+                    utils.logger.error(f"Erro no snapping: {e}")
                 
             if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
                 scene = self.scene()
@@ -57,30 +59,24 @@ class VisualMeterItem(QGraphicsRectItem):
             # O objeto C++ subjacente foi deletado (ex: durante scene.clear()).
             # Ignorar silenciosamente para evitar crash.
             return value
-
     def apply_solid_color(self, color_str):
-        if not color_str:
+        if not color_str: return
+        color = utils.parse_color(color_str)
+        if color:
+            self.setBrush(QBrush(color))
+        else:
             self.setBrush(QBrush(Qt.BrushStyle.NoBrush))
-            return
-        parts = [p.strip() for p in color_str.split(',')]
-        if len(parts) >= 3:
-            try:
-                r, g, b = int(parts[0]), int(parts[1]), int(parts[2])
-                a = int(parts[3]) if len(parts) == 4 else 255
-                self.setBrush(QBrush(QColor(r, g, b, a)))
-            except: pass
 
     def apply_padding(self, padding_str):
         if not padding_str: return
         parts = [p.strip() for p in padding_str.split(',')]
         if len(parts) == 4:
-            try:
-                l, t, r, b = [int(p) for p in parts]
-                rect = self.rect()
-                # Expandir o retângulo do background conforme o padding
-                # No Rainmeter, padding adiciona espaço ao redor do conteúdo
-                self.setRect(rect.x() - l, rect.y() - t, rect.width() + l + r, rect.height() + t + b)
-            except: pass
+            l = utils.safe_int(parts[0])
+            t = utils.safe_int(parts[1])
+            r = utils.safe_int(parts[2])
+            b = utils.safe_int(parts[3])
+            rect = self.rect()
+            self.setRect(rect.x() - l, rect.y() - t, rect.width() + l + r, rect.height() + t + b)
 
 class VisualStringItem(VisualMeterItem):
     def __init__(self, section_name, text="Texto", x=0, y=0, w=0, h=0):
@@ -153,18 +149,56 @@ class VisualImageItem(VisualMeterItem):
 class VisualBarItem(VisualMeterItem):
     def __init__(self, section_name, x=0, y=0, w=100, h=10):
         super().__init__(section_name, x, y, w, h)
-        self.bar_foreground = QGraphicsRectItem(0, 0, w * 0.6, h, self) # 60% default progress
-        self.bar_foreground.setBrush(QBrush(QColor(0, 122, 204)))
+        
+        # Fundo da Barra
+        self.bar_background = QGraphicsRectItem(0, 0, w, h, self)
+        self.bar_background.setPen(QPen(Qt.PenStyle.NoPen))
+        
+        # Cor da Barra (A parte que preenche/O valor ativo)
+        self.bar_foreground = QGraphicsRectItem(0, 0, w * 0.6, h, self)  # 60% inicial apenas para prévia
         self.bar_foreground.setPen(QPen(Qt.PenStyle.NoPen))
+        self.bar_foreground.setBrush(QBrush(QColor(0, 200, 0)))
+
+    def apply_solid_color(self, color_str):
+        # Para barras, SolidColor geralmente pinta o fundo atrás do bar_foreground
+        color = utils.parse_color(color_str)
+        if color:
+            self.bar_background.setBrush(QBrush(color))
 
     def set_bar_color(self, color_str):
-        parts = [p.strip() for p in color_str.split(',')]
-        if len(parts) >= 3:
-            try:
-                r, g, b = int(parts[0]), int(parts[1]), int(parts[2])
-                a = int(parts[3]) if len(parts) == 4 else 255
-                self.bar_foreground.setBrush(QBrush(QColor(r, g, b, a)))
-            except: pass
+        color = utils.parse_color(color_str)
+        if color:
+            self.bar_foreground.setBrush(QBrush(color))
+            
+class VisualRotatorItem(VisualMeterItem):
+    def __init__(self, section_name, img_path, x=0, y=0, w=0, h=0):
+        super().__init__(section_name, x, y, w, h)
+        self.pixmap_item = QGraphicsPixmapItem(self)
+        
+        if os.path.exists(img_path):
+            pix = QPixmap(img_path)
+            if not pix.isNull():
+                if w > 0 and h > 0:
+                    pix = pix.scaled(w, h, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                self.pixmap_item.setPixmap(pix)
+        else:
+            w = w if w > 0 else 50
+            h = h if h > 0 else 50
+            placeholder = QPixmap(w, h)
+            placeholder.fill(QColor(150, 50, 150, 150))
+            self.pixmap_item.setPixmap(placeholder)
+            
+        rect = self.pixmap_item.boundingRect()
+        self.setRect(rect)
+        # O centro de rotação padrão é o centro da imagem se os Offsets não foram providenciados
+        self.setTransformOriginPoint(rect.width() / 2, rect.height() / 2)
+        
+    def apply_rotation(self, angle_deg, offset_x=0, offset_y=0):
+        """Rainmeter Rotator offsets alteram o ponto de rotação. Angle aplica a rotação inicial."""
+        # Se offset for providenciado, ele afeta o origin point da rotação
+        if offset_x or offset_y:
+            self.setTransformOriginPoint(offset_x, offset_y)
+        self.setRotation(angle_deg)
 
 class VisualShapeItem(VisualMeterItem):
     """Implementa o suporte básico para Meter=Shape."""
@@ -191,9 +225,7 @@ class VisualShapeItem(VisualMeterItem):
         if len(cmd_parts) > 1:
             # Tentar extrair argumentos (ex: 0,0,100,50)
             args_raw = "".join(cmd_parts[1:])
-            try:
-                args = [float(a.strip()) for a in args_raw.split(',') if a.strip()]
-            except: pass
+            args = [utils.safe_float(a.strip()) for a in args_raw.split(',') if a.strip()]
 
         path = QPainterPath()
         if shape_type == 'rectangle' and len(args) >= 4:
@@ -225,8 +257,7 @@ class VisualShapeItem(VisualMeterItem):
                 c = self._parse_shape_color(mod[12:].strip())
                 if c: stroke_color = c
             elif low_mod.startswith('strokewidth'):
-                try: stroke_width = float(low_mod[11:].strip())
-                except: pass
+                stroke_width = utils.safe_float(low_mod[11:].strip(), default=1.0)
 
         if fill_color:
             self.path_item.setBrush(QBrush(fill_color))
@@ -241,14 +272,7 @@ class VisualShapeItem(VisualMeterItem):
         self.setRect(self.path_item.boundingRect())
 
     def _parse_shape_color(self, color_str):
-        parts = [p.strip() for p in color_str.split(',')]
-        if len(parts) >= 3:
-            try:
-                r, g, b = int(parts[0]), int(parts[1]), int(parts[2])
-                a = int(parts[3]) if len(parts) == 4 else 255
-                return QColor(r, g, b, a)
-            except: pass
-        return None
+        return utils.parse_color(color_str)
 
 class SkinBoundaryItem(QGraphicsRectItem):
     """Representa visualmente os limites da skin."""
@@ -284,7 +308,7 @@ class VisualCanvas(QGraphicsView):
         self.setScene(self.scene_obj)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
+        self.setDragMode(QGraphicsView.DragMode.NoDrag)  # Gerenciamos tudo manualmente
         self._apply_background_color()
         
         # Elementos auxiliares
@@ -299,6 +323,12 @@ class VisualCanvas(QGraphicsView):
         self._multi_drag_active = False      # True quando drag manual de multi-seleção
         self._multi_drag_scene_start = None  # posição de início no scene
         self._drag_start_positions = {}      # section → (x, y)
+        
+        # Rubber band manual
+        self._rb_active = False
+        self._rb_origin = None               # QPoint (viewport)
+        self._rb_rect_item = None            # QGraphicsRectItem de preview
+        self._rb_pre_selection = []          # itens selecionados ANTES do rubber band começar
 
         # Sinais para comunicar mudanças ao Editor principal
         self.item_moved_signal = None
@@ -308,6 +338,11 @@ class VisualCanvas(QGraphicsView):
         self.duplicate_requested_signal = None # function(section)
         self.multi_move_signal = None        # function(list[(section, x, y)])
         self.remove_multiple_signal = None   # function(list[section])
+        self.item_dragging_signal = None     # function(section, x, y, w, h)
+        self.mouse_move_signal = None        # function(scene_x, scene_y)
+        self.setMouseTracking(True)
+        self.group_requested_signal = None   # function(list[section])
+        self.ungroup_requested_signal = None # function(section)
 
     def _selected_meter_items(self):
         """Retorna lista de VisualMeterItems atualmente selecionados."""
@@ -329,9 +364,13 @@ class VisualCanvas(QGraphicsView):
 
         if len(selected) > 1:
             # Menu de multi-seleção
+            grp_action = menu.addAction(f"Agrupar {len(selected)} itens")
+            menu.addSeparator()
             del_action = menu.addAction(f"Excluir {len(selected)} itens selecionados")
             action = menu.exec(event.globalPos())
-            if action == del_action and self.remove_multiple_signal:
+            if action == grp_action and self.group_requested_signal:
+                self.group_requested_signal([i.section_name for i in selected])
+            elif action == del_action and self.remove_multiple_signal:
                 self.remove_multiple_signal([i.section_name for i in selected])
 
         elif item_at:
@@ -340,11 +379,14 @@ class VisualCanvas(QGraphicsView):
             dup_action = menu.addAction(f"Duplicar '{section}'")
             del_action = menu.addAction(f"Excluir '{section}'")
             menu.addSeparator()
+            ungrp_action = menu.addAction(f"Desagrupar '{section}'")
             action = menu.exec(event.globalPos())
             if action == dup_action:
                 if self.duplicate_requested_signal: self.duplicate_requested_signal(section)
             elif action == del_action:
                 if self.remove_requested_signal: self.remove_requested_signal(section)
+            elif action == ungrp_action:
+                if self.ungroup_requested_signal: self.ungroup_requested_signal(section)
 
         else:
             # Menu para área vazia
@@ -352,6 +394,7 @@ class VisualCanvas(QGraphicsView):
             add_image = menu.addAction("Adicionar Imagem (Image)")
             add_bar = menu.addAction("Adicionar Barra (Bar)")
             add_roundline = menu.addAction("Adicionar Roundline (Roundline)")
+            add_rotator = menu.addAction("Adicionar Ponteiro (Rotator)")
             add_shape = menu.addAction("Adicionar Forma (Shape)")
             action = menu.exec(event.globalPos())
             scene_pos = self.mapToScene(event.pos())
@@ -364,6 +407,8 @@ class VisualCanvas(QGraphicsView):
                 if self.add_requested_signal: self.add_requested_signal(x, y, 'Bar')
             elif action == add_roundline:
                 if self.add_requested_signal: self.add_requested_signal(x, y, 'Roundline')
+            elif action == add_rotator:
+                if self.add_requested_signal: self.add_requested_signal(x, y, 'Rotator')
             elif action == add_shape:
                 if self.add_requested_signal: self.add_requested_signal(x, y, 'Shape')
 
@@ -377,14 +422,13 @@ class VisualCanvas(QGraphicsView):
             ctrl = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
 
             if item and ctrl:
-                # Ctrl+Click: alterna seleção sem processar pelo super()
+                # Ctrl+Click: alterna seleção individual
                 item.setSelected(not item.isSelected())
                 event.accept()
                 return
 
             if item and item.isSelected() and len(self._selected_meter_items()) > 1:
-                # Clicou em item já selecionado dentro de multi-seleção:
-                # iniciar drag manual para não perder a seleção via super()
+                # Clicou em item já selecionado com multi-seleção ativa → drag do grupo
                 self._drag_active = True
                 self._multi_drag_active = True
                 self._multi_drag_scene_start = self.mapToScene(event.pos())
@@ -396,20 +440,56 @@ class VisualCanvas(QGraphicsView):
                 return
 
             if item:
-                # Item único – drag gerenciado pelo Qt, só rastreamos
+                # Item único – iniciar drag nativo
+                if not ctrl:
+                    # Deselecionar outros somente se Ctrl não pressionado
+                    for i in self.scene_obj.items():
+                        if hasattr(i, 'section_name') and i is not item:
+                            i.setSelected(False)
+                item.setSelected(True)
                 self._drag_active = True
+                super().mousePressEvent(event)
+                self._drag_start_positions = {
+                    i.section_name: (i.pos().x(), i.pos().y())
+                    for i in self._selected_meter_items()
+                }
+                return
+
+            # Clicou em área vazia → iniciar rubber band
+            if not ctrl:
+                # Sem Ctrl: limpar seleção
+                for i in self.scene_obj.items():
+                    if hasattr(i, 'section_name'):
+                        i.setSelected(False)
+            
+            # Guardar o que estava selecionado antes (para Ctrl+rubber band aditivo)
+            self._rb_pre_selection = list(self._selected_meter_items())
+            self._rb_active = True
+            self._rb_origin = event.pos()
+            
+            # Criar item de preview do rubber band
+            pen = QPen(QColor(0, 122, 204, 200), 1, Qt.PenStyle.DashLine)
+            self._rb_rect_item = self.scene_obj.addRect(
+                QRectF(self.mapToScene(event.pos()), self.mapToScene(event.pos())),
+                pen,
+                QBrush(QColor(0, 122, 204, 40))
+            )
+            self._rb_rect_item.setZValue(9999)
+            event.accept()
+            return
 
         super().mousePressEvent(event)
 
-        # Grava posições iniciais para drag de item único
-        if self._drag_active and not self._multi_drag_active:
-            self._drag_start_positions = {
-                i.section_name: (i.pos().x(), i.pos().y())
-                for i in self._selected_meter_items()
-            }
-
     def mouseMoveEvent(self, event):
-        if self._multi_drag_active:
+        # Rubber band manual
+        if self._rb_active and self._rb_origin is not None:
+            origin_scene = self.mapToScene(self._rb_origin)
+            cur_scene = self.mapToScene(event.pos())
+            rb_rect = QRectF(origin_scene, cur_scene).normalized()
+            if self._rb_rect_item:
+                self._rb_rect_item.setRect(rb_rect)
+            event.accept()
+        elif self._multi_drag_active:
             delta = self.mapToScene(event.pos()) - self._multi_drag_scene_start
             if self.snap_to_grid_flag:
                 g = self.grid_size
@@ -423,10 +503,47 @@ class VisualCanvas(QGraphicsView):
                     item.setPos(start[0] + dx, start[1] + dy)
             self.update_boundary()
             event.accept()
-            return
-        super().mouseMoveEvent(event)
+        else:
+            super().mouseMoveEvent(event)
+
+        if self._drag_active and self.item_dragging_signal:
+            selected = self._selected_meter_items()
+            if len(selected) == 1:
+                item = selected[0]
+                rect = item.sceneBoundingRect()
+                self.item_dragging_signal(item.section_name, int(rect.x()), int(rect.y()), int(rect.width()), int(rect.height()))
+
+        # Coordenadas do mouse sempre que ele se mover no canvas
+        if self.mouse_move_signal:
+            scene_pos = self.mapToScene(event.pos())
+            self.mouse_move_signal(int(scene_pos.x()), int(scene_pos.y()))
 
     def mouseReleaseEvent(self, event):
+        # Finalizar rubber band
+        if self._rb_active and event.button() == Qt.MouseButton.LeftButton:
+            self._rb_active = False
+            if self._rb_rect_item:
+                rb_scene_rect = self._rb_rect_item.rect()
+                self.scene_obj.removeItem(self._rb_rect_item)
+                self._rb_rect_item = None
+            else:
+                rb_scene_rect = QRectF()
+            
+            ctrl = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+            
+            # Selecionar todos os meter items dentro do rubber band
+            for item in self.scene_obj.items():
+                if hasattr(item, 'section_name') and item.parentItem() is None:
+                    if rb_scene_rect.intersects(item.sceneBoundingRect()):
+                        item.setSelected(True)
+                    elif not ctrl and item not in self._rb_pre_selection:
+                        item.setSelected(False)
+            
+            self._rb_pre_selection = []
+            self.update_boundary()
+            event.accept()
+            return
+
         if event.button() != Qt.MouseButton.LeftButton or not self._drag_active:
             super().mouseReleaseEvent(event)
             return
@@ -623,12 +740,13 @@ class VisualCanvas(QGraphicsView):
         if bg_mode == 1:
             if solid_color_str:
                 parts = [p.strip() for p in solid_color_str.split(',')]
-                try:
-                    r, g, b = int(parts[0]), int(parts[1]), int(parts[2])
-                    a = int(parts[3]) if len(parts) >= 4 else 255
-                    color = QColor(r, g, b, a)
-                except (ValueError, IndexError):
-                    color = QColor(0, 0, 0, 128)
+            try:
+                r, g, b = int(parts[0]), int(parts[1]), int(parts[2])
+                a = int(parts[3]) if len(parts) >= 4 else 255
+                color = QColor(r, g, b, a)
+            except (ValueError, IndexError) as e:
+                utils.logger.warning(f"Erro ao parsear cor de background: {e}")
+                color = QColor(0, 0, 0, 128)
             else:
                 color = QColor(0, 0, 0, 128)
             # Calcula tamanho da cena para preencher o background
@@ -654,6 +772,10 @@ class VisualCanvas(QGraphicsView):
         self.scene_obj.clear()
         self._setup_auxiliary_items()
 
+    def on_item_selected(self, section):
+        if self.item_selected_signal:
+            self.item_selected_signal(section)
+
     def item_moved(self, section, pos):
         if self.item_moved_signal:
             self.item_moved_signal(section, int(pos.x()), int(pos.y()))
@@ -674,6 +796,17 @@ class VisualCanvas(QGraphicsView):
                         other.setSelected(False)
                 break
 
+    def select_sections(self, sections, clear_others=True):
+        """Seleciona múltiplas seções de uma vez."""
+        sections_set = set(sections)
+        for item in self.scene_obj.items():
+            if hasattr(item, 'section_name') and item.parentItem() is None:
+                if item.section_name in sections_set:
+                    item.setSelected(True)
+                elif clear_others:
+                    item.setSelected(False)
+        self.update_boundary()
+
     def set_item_locked(self, section, is_locked):
         for item in self.scene_obj.items():
             if hasattr(item, 'section_name') and item.section_name == section:
@@ -683,9 +816,9 @@ class VisualCanvas(QGraphicsView):
                     item.setSelected(False)
                 break
 
-    def _parse_coord(self, value, prev_item=None, is_y=False):
+    def _parse_coord(self, value, prev_item=None, is_y=False, ref_size=0):
         """Tenta converter valores de coordenadas do Rainmeter para int.
-        Suporta: números simples, sufixos 'r' e 'R' (relativos), expressões matemáticas como (1*260)."""
+        Suporta: números simples, sufixos 'r' e 'R' (relativos), formatos em % e expressões matemáticas como (1*260)."""
         if isinstance(value, (int, float)):
             return int(value)
         if not value or not isinstance(value, str):
@@ -693,7 +826,12 @@ class VisualCanvas(QGraphicsView):
         
         clean = value.strip()
         
-        # Verificar sufixos relativos
+        # Verificar sufixos relativos ou percentuais
+        is_percent = clean.endswith('%')
+        if is_percent:
+            clean = clean[:-1].strip()
+            if not clean: clean = "0"
+            
         is_rel_r = clean.endswith('r')
         is_rel_R = clean.endswith('R')
         
@@ -716,6 +854,9 @@ class VisualCanvas(QGraphicsView):
                 except Exception:
                     base_val = 0
                     
+        if is_percent and ref_size:
+            base_val = int((base_val / 100.0) * ref_size)
+            
         # Aplicar relatividade se necessário e se houver um item anterior
         if (is_rel_r or is_rel_R) and prev_item:
             # Obter bounding rect do item anterior no coordinate system do canvas (cena)
@@ -734,8 +875,8 @@ class VisualCanvas(QGraphicsView):
         return base_val
 
     def add_meter(self, section, meter_type, props, prev_item=None):
-        x = self._parse_coord(props.get('x', 0), prev_item, False)
-        y = self._parse_coord(props.get('y', 0), prev_item, True)
+        x = self._parse_coord(props.get('x', 0), prev_item, False, ref_size=1920)
+        y = self._parse_coord(props.get('y', 0), prev_item, True, ref_size=1080)
         
         item = None
         m_type = meter_type.lower()
@@ -744,8 +885,8 @@ class VisualCanvas(QGraphicsView):
             text = props.get('text', section)
             w_str = props.get('w')
             h_str = props.get('h')
-            str_w = self._parse_coord(w_str) if w_str else 0
-            str_h = self._parse_coord(h_str) if h_str else 0
+            str_w = self._parse_coord(w_str, ref_size=1920) if w_str else 0
+            str_h = self._parse_coord(h_str, ref_size=1080) if h_str else 0
             item = VisualStringItem(section, text, x, y, w=str_w, h=str_h)
             
             # Aplicar fonte
@@ -756,8 +897,7 @@ class VisualCanvas(QGraphicsView):
             if font_face or font_size or font_style:
                 font = QFont(font_face if font_face else "Arial")
                 if font_size:
-                    try: font.setPointSize(int(font_size))
-                    except: pass
+                    font.setPointSize(utils.safe_int(font_size, default=10))
                 if 'bold' in font_style: font.setBold(True)
                 if 'italic' in font_style: font.setItalic(True)
                 item.setFont(font)
@@ -772,15 +912,9 @@ class VisualCanvas(QGraphicsView):
                 item.setPlainText(item.text_item.toPlainText().title())
             
             # Cor do Texto
-            color_str = props.get('fontcolor')
-            if color_str:
-                parts = [p.strip() for p in color_str.split(',')]
-                if len(parts) >= 3:
-                    try:
-                        r, g, b = int(parts[0]), int(parts[1]), int(parts[2])
-                        a = int(parts[3]) if len(parts) == 4 else 255
-                        item.setDefaultTextColor(QColor(r, g, b, a))
-                    except: pass
+            color = utils.parse_color(props.get('fontcolor'))
+            if color:
+                item.setDefaultTextColor(color)
             
             # Alinhamento do texto
             align_str = props.get('stringalign', 'Left')
@@ -789,11 +923,8 @@ class VisualCanvas(QGraphicsView):
             # Aplicar Rotação (Angle - Rainmeter usa radianos, mas PyQt usa graus)
             angle = props.get('angle')
             if angle:
-                try:
-                    # Converter radianos para graus se for o caso, ou assumir graus se o usuário preferir
-                    # Rainmeter oficial é radianos. 1 rad = 57.2958 graus.
-                    item.setRotation(float(angle) * 57.2958)
-                except: pass
+                # Rainmeter oficial é radianos. 1 rad = 57.2958 graus.
+                item.setRotation(utils.safe_float(angle) * 57.2958)
 
         elif m_type == 'image':
             # Combinar imagepath + imagename para obter o caminho completo
@@ -811,8 +942,8 @@ class VisualCanvas(QGraphicsView):
             h_str = props.get('h')
             if w_str or h_str:
                 try:
-                    w = self._parse_coord(w_str) if w_str else 0
-                    h = self._parse_coord(h_str) if h_str else 0
+                    w = self._parse_coord(w_str, ref_size=1920) if w_str else 0
+                    h = self._parse_coord(h_str, ref_size=1080) if h_str else 0
                     pix = item.pixmap_item.pixmap()
                     if not pix.isNull() and w > 0 and h > 0:
                         item.setPixmap(pix.scaled(w, h, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation))
@@ -821,7 +952,8 @@ class VisualCanvas(QGraphicsView):
                         placeholder = QPixmap(w, h)
                         placeholder.fill(QColor(100, 100, 100, 150))
                         item.setPixmap(placeholder)
-                except (ValueError, TypeError): pass
+                except (ValueError, TypeError) as e:
+                    utils.logger.warning(f"Erro ao escalar Meter=Image '{section}': {e}")
             
             # Aplicar ImageTint
             tint_color = props.get('imagetint')
@@ -832,11 +964,12 @@ class VisualCanvas(QGraphicsView):
                         effect = QGraphicsColorizeEffect()
                         effect.setColor(QColor(int(parts[0]), int(parts[1]), int(parts[2])))
                         item.setGraphicsEffect(effect)
-                    except: pass
+                    except Exception as e:
+                        utils.logger.warning(f"Erro ao aplicar ImageTint em '{section}': {e}")
 
         elif m_type == 'bar':
-            w = int(props.get('w', 100))
-            h = int(props.get('h', 10))
+            w = self._parse_coord(props.get('w', 100), prev_item, False, ref_size=1920)
+            h = self._parse_coord(props.get('h', 10), prev_item, True, ref_size=1080)
             item = VisualBarItem(section, x, y, w, h)
             
             # Cor da Barra (Foreground)
@@ -860,6 +993,22 @@ class VisualCanvas(QGraphicsView):
             
             for k in keys:
                 item.apply_shape_string(props[k])
+
+        elif m_type == 'rotator':
+            img_name = props.get('imagename', '')
+            img_full = img_name if os.path.isabs(img_name) else (props.get('imagepath', '').rstrip('/\\') + os.sep + img_name if img_name else '')
+            w = self._parse_coord(props.get('w', 0), prev_item, False, ref_size=1920)
+            h = self._parse_coord(props.get('h', 0), prev_item, True, ref_size=1080)
+            
+            item = VisualRotatorItem(section, img_full, x, y, w, h)
+            
+            start_angle = utils.safe_float(props.get('startangle', '0'))
+            offset_x = self._parse_coord(props.get('offsetx', 0), prev_item, False)
+            offset_y = self._parse_coord(props.get('offsety', 0), prev_item, True)
+            
+            # Start angle no Rainmeter é em radianos
+            degrees = start_angle * 57.2958
+            item.apply_rotation(degrees, offset_x, offset_y)
 
         if item:
             # Aplicar SolidColor (Background) para qualquer meter

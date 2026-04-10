@@ -28,111 +28,23 @@ from commands import (
     ChangeValueCommand, MoveItemCommand, RenameSectionCommand,
     AddCommentCommand, DeleteCommentCommand
 )
+from core.constants import SUPPORTED_ENCODINGS, DEFAULT_ENCODING, VAR_FILE_ENCODING
+from ui.delegates import KeyValueDelegate
 
 
-class KeyValueDelegate(QStyledItemDelegate):
-    """Renderiza itens de chave da árvore com cores separadas para nome e valor,
-    igual ao IniHighlighter do editor de código."""
 
-    def __init__(self, editor):
-        super().__init__(editor)
-        self.editor = editor
-
-    def _colors(self):
-        dark = self.editor.dark_mode
-        if dark:
-            return {
-                'key':     QColor("#9cdcfe"),
-                'var':     QColor("#4ec9b0"),
-                'num':     QColor("#b5cea8"),
-                'default': QColor("#cccccc"),
-            }
-        return {
-            'key':     QColor("#0000ff"),
-            'var':     QColor("#008080"),
-            'num':     QColor("#008000"),
-            'default': QColor("#000000"),
-        }
-
-    def _val_color(self, colors, value):
-        if '#' in value:
-            return colors['var']
-        stripped = value.strip()
-        if stripped.isdigit() or (',' in stripped and all(x.strip().isdigit() for x in stripped.split(','))):
-            return colors['num']
-        return colors['default']
-
-    def paint(self, painter, option, index):
-        data = index.data(Qt.ItemDataRole.UserRole)
-        if not data or data[0] != 'key':
-            super().paint(painter, option, index)
-            return
-
-        # Cópia segura do option para não corromper o objeto C++ original
-        opt = QStyleOptionViewItem(option)
-        self.initStyleOption(opt, index)
-
-        widget = opt.widget
-        style = widget.style() if widget else QApplication.style()
-
-        painter.save()
-
-        # Desenha fundo (seleção, hover) sem o texto
-        opt.text = ''
-        style.drawControl(QStyle.ControlElement.CE_ItemViewItem, opt, painter, widget)
-
-        text_rect = style.subElementRect(QStyle.SubElement.SE_ItemViewItemText, opt, widget)
-        text = index.data(Qt.ItemDataRole.DisplayRole) or ''
-        is_selected = bool(opt.state & QStyle.StateFlag.State_Selected)
-
-        colors = self._colors()
-
-        if '=' in text:
-            eq_pos = text.index('=')
-            key_part = text[:eq_pos].rstrip() + ' '
-            eq_part = '= '
-            val_part = text[eq_pos + 1:].strip()
-        else:
-            key_part = text
-            eq_part = ''
-            val_part = ''
-
-        painter.setFont(opt.font)
-        fm = painter.fontMetrics()
-        x = text_rect.x() + 2
-        y = text_rect.y() + (text_rect.height() - fm.height()) // 2 + fm.ascent()
-
-        def draw(txt, color):
-            nonlocal x
-            c = QColor("#ffffff") if is_selected else color
-            painter.setPen(c)
-            painter.drawText(x, y, txt)
-            x += fm.horizontalAdvance(txt)
-
-        draw(key_part, colors['key'])
-        draw(eq_part, colors['default'])
-        draw(val_part, self._val_color(colors, val_part))
-
-        painter.restore()
+# KeyValueDelegate movido para ui/delegates.py
 
 
 class IniEditor(QMainWindow):
-    SUPPORTED_ENCODINGS = [
-        ('utf-8-sig', 'UTF-8 com BOM'),
-        ('utf-8', 'UTF-8'),
-        ('utf-16', 'UTF-16'),
-        ('utf-16-le', 'UTF-16 Little Endian'),
-        ('utf-16-be', 'UTF-16 Big Endian'),
-        ('cp1252', 'ANSI (Windows-1252)'),
-        ('latin-1', 'Latin-1'),
-    ]
+    # SUPPORTED_ENCODINGS movido para core/constants.py
 
     def __init__(self):
         super().__init__()
         self.ini_file = None
         self.var_file = None
-        self.current_encoding = 'utf-8-sig'
-        self.var_file_encoding = 'utf-8'
+        self.current_encoding = DEFAULT_ENCODING
+        self.var_file_encoding = VAR_FILE_ENCODING
         self.raw_lines = []  # Linhas brutas do arquivo (preserva comentários)
         self.dark_mode = True
         self.config = configparser.ConfigParser(interpolation=None, strict=False)
@@ -201,6 +113,11 @@ class IniEditor(QMainWindow):
         save_as_action = QAction(_('Salvar Como'), self)
         save_as_action.triggered.connect(self.save_file_as)
         file_menu.addAction(save_as_action)
+
+        close_action = QAction(_('Fechar'), self)
+        close_action.setShortcut('Ctrl+W')
+        close_action.triggered.connect(self.close_file)
+        file_menu.addAction(close_action)
         
         file_menu.addSeparator()
 
@@ -221,6 +138,13 @@ class IniEditor(QMainWindow):
         export_action = QAction(_('Exportar skin (.rmskin)'), self)
         export_action.triggered.connect(self.export_rmskin)
         file_menu.addAction(export_action)
+
+        file_menu.addSeparator()
+
+        exit_action = QAction(_('Sair'), self)
+        exit_action.setShortcut('Alt+F4')
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
 
         # Formatação
         format_menu = menubar.addMenu(_('Formatação'))
@@ -698,7 +622,64 @@ class IniEditor(QMainWindow):
             self.var_highlighter.set_theme(self.dark_mode)
 
 
+    def closeEvent(self, event):
+        if self.check_unsaved_changes():
+            event.accept()
+        else:
+            event.ignore()
+
+    def check_unsaved_changes(self):
+        if not self.undo_stack.isClean():
+            reply = QMessageBox.question(
+                self, _('Salvar alterações?'),
+                _('Você tem alterações não salvas. Deseja salvá-las antes de prosseguir?'),
+                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel
+            )
+            if reply == QMessageBox.StandardButton.Save:
+                self.save_file()
+                return True
+            elif reply == QMessageBox.StandardButton.Discard:
+                return True
+            else: # Cancel
+                return False
+        return True
+
+    def close_file(self):
+        if not self.check_unsaved_changes():
+            return
+
+        self.ini_file = None
+        self.var_file = None
+        self.config = configparser.ConfigParser(interpolation=None, strict=False)
+        self.undo_stack.clear()
+        self.raw_lines = []
+        self.resolved_vars = {}
+        
+        # Resetar UI
+        self.tree.clear()
+        self.value_editor.clear()
+        self.var_editor.clear()
+        self.canvas_widget.clear_canvas()
+        self.layer_panel.set_meters([])
+        self.prop_panel.clear_properties()
+        self.asset_tab.set_resources_path(None)
+        
+        self.var_file_combo.blockSignals(True)
+        self.var_file_combo.clear()
+        self.var_file_combo.blockSignals(False)
+        
+        self.add_skin_action.setEnabled(False)
+        self.btn_save_vars.setEnabled(False)
+        
+        self.setWindowTitle('Editor de Arquivos .ini - Rainmeter Skins')
+        
+        var_idx = self.tabs.indexOf(self.var_widget)
+        if var_idx != -1:
+            self.tabs.setTabText(var_idx, _("Variáveis Globais"))
+
     def open_file(self):
+        if not self.check_unsaved_changes():
+            return
         file_path, _ = QFileDialog.getOpenFileName(
             self, 'Abrir arquivo .ini', '', 'Arquivos INI (*.ini);;Todos os arquivos (*)'
         )
@@ -706,6 +687,8 @@ class IniEditor(QMainWindow):
             self.load_ini_file(file_path)
 
     def new_skin(self):
+        if not self.check_unsaved_changes():
+            return
         dialog = NewSkinDialog(self)
         dialog.setStyleSheet(self.styleSheet())
         if dialog.exec():
@@ -1702,6 +1685,9 @@ class IniEditor(QMainWindow):
                     f.write(content)
                 else:
                     self.config.write(f)  # Fallback se raw_lines estiver vazio
+            
+            self.undo_stack.setClean()
+            
             if not silent:
                 QMessageBox.information(
                     self,
@@ -1774,6 +1760,9 @@ class IniEditor(QMainWindow):
             QMessageBox.critical(self, 'Erro', f'Erro ao salvar projeto: {result}')
 
     def open_project(self, file_path=None):
+        if not self.check_unsaved_changes():
+            return
+
         if not file_path:
             file_path, _ = QFileDialog.getOpenFileName(
                 self, 'Abrir Projeto', '', 'Arquivos de Projeto Rainmeter (*.rmproject);;Todos os arquivos (*)'

@@ -168,7 +168,7 @@ AntiAlias=1
     except Exception as e:
         return False, str(e)
 
-def add_skin_to_project(project_path, skin_name):
+def add_skin_to_project(project_path, skin_name, author=""):
     """
     Cria uma nova pasta e um novo arquivo .ini para uma nova skin
     dentro de um projeto já existente (que já possui a pasta @Resources).

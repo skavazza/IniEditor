@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QColor, QIcon
 from PyQt6.QtCore import Qt, QSize
+import utils
 from utils import resource_path
 from .dialogs import ShapeEditorDialog
 
@@ -248,6 +249,14 @@ class PropertyPanel(QWidget):
         """Define quais seções podem ser usadas como MeterStyle."""
         self._available_styles = style_sections
 
+    def clear_properties(self):
+        self.current_section = None
+        self.label.setText("<b>Propriedades</b>")
+        while self.form_layout.count():
+            child = self.form_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
     def set_properties(self, section, props):
         self.current_section = section
         # Limpar formulário atual
@@ -303,6 +312,16 @@ class PropertyPanel(QWidget):
             self._add_shape_property("Shape2", props.get('shape2', ''))
             self._add_shape_property("Shape3", props.get('shape3', ''))
             self._add_combo_property("AntiAlias", props.get('antialias', '1'), ['1', '0'])
+        elif meter_type == 'rotator':
+            self._add_property("ImageName", props.get('imagename', ''))
+            self._add_property("ImagePath", props.get('imagepath', ''))
+            self._add_property("OffsetX", props.get('offsetx', '0'))
+            self._add_property("OffsetY", props.get('offsety', '0'))
+            self._add_property("StartAngle", props.get('startangle', '0'))
+            self._add_property("RotationAngle", props.get('rotationangle', '6.2832'))
+            self._add_property("ValueRemainder", props.get('valueremainder', ''))
+            self._add_color_property("ImageTint", props.get('imagetint', ''))
+            self._add_combo_property("PreserveAspectRatio", props.get('preserveaspectratio', '0'), ['0', '1', '2'])
 
     def _add_property(self, key, value):
         edit = QLineEdit(str(value))
@@ -334,27 +353,18 @@ class PropertyPanel(QWidget):
         if not color_str:
             color_str = "255,255,255"
         
-        parts = [p.strip() for p in str(color_str).split(',')]
         bg_color = "white"
-        if 3 <= len(parts) <= 4:
-            try:
-                r, g, b = parts[0], parts[1], parts[2]
-                bg_color = f"rgb({r},{g},{b})"
-            except: pass
+        color = utils.parse_color(color_str)
+        if color:
+            bg_color = f"rgb({color.red()},{color.green()},{color.blue()})"
             
         button.setStyleSheet(f"background-color: {bg_color}; border: 1px solid #888; border-radius: 3px;")
 
     def _open_color_picker(self, key, edit, button):
         initial_color = QColor(255, 255, 255)
-        current_text = edit.text()
-        if current_text:
-            parts = [p.strip() for p in current_text.split(',')]
-            if 3 <= len(parts) <= 4:
-                try:
-                    r, g, b = int(parts[0]), int(parts[1]), int(parts[2])
-                    a = int(parts[3]) if len(parts) == 4 else 255
-                    initial_color = QColor(r, g, b, a)
-                except ValueError: pass
+        color = utils.parse_color(edit.text())
+        if color:
+            initial_color = color
 
         color = QColorDialog.getColor(initial_color, self, "Selecionar Cor", QColorDialog.ColorDialogOption.ShowAlphaChannel)
         

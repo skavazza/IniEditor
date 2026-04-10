@@ -2,7 +2,7 @@ import sys
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 
-from editor import IniEditor
+from ui import IniEditor
 from utils import resource_path
 
 
