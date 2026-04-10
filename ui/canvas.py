@@ -219,9 +219,11 @@ class VisualShapeItem(VisualMeterItem):
         for mod in parts[1:]:
             low_mod = mod.lower()
             if low_mod.startswith('fill color'):
-                fill_color = self._parse_shape_color(mod[10:].strip())
+                c = self._parse_shape_color(mod[10:].strip())
+                if c: fill_color = c
             elif low_mod.startswith('stroke color'):
-                stroke_color = self._parse_shape_color(mod[12:].strip())
+                c = self._parse_shape_color(mod[12:].strip())
+                if c: stroke_color = c
             elif low_mod.startswith('strokewidth'):
                 try: stroke_width = float(low_mod[11:].strip())
                 except: pass

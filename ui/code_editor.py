@@ -1,7 +1,9 @@
 from PyQt6.QtWidgets import QTextEdit, QCompleter
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 
 class RainmeterEdit(QTextEdit):
+    focused = pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.completer = None
@@ -133,3 +135,7 @@ class RainmeterEdit(QTextEdit):
         cr = self.cursorRect()
         cr.setWidth(self.completer.popup().sizeHintForColumn(0) + self.completer.popup().verticalScrollBar().sizeHint().width())
         self.completer.complete(cr)
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        self.focused.emit()

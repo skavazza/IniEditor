@@ -162,6 +162,9 @@ class IniEditor(QMainWindow):
         self.auto_save_timer.timeout.connect(self.auto_save_file)
         self.configure_auto_save()
         
+        # Rastrear qual editor foi usado por último para inserção de snippets/ativos
+        self.last_active_editor = None
+
         self.init_ui()
         self.apply_theme()
 
@@ -341,6 +344,8 @@ class IniEditor(QMainWindow):
         self.value_editor = RainmeterEdit()
         self.value_editor.setPlaceholderText(_('Selecione uma chave para editar seu valor'))
         self.value_editor.textChanged.connect(self.on_value_changed)
+        self.value_editor.focused.connect(lambda: self._set_last_active(self.value_editor))
+        self.last_active_editor = self.value_editor # Default
         self.highlighter = IniHighlighter(self.value_editor.document(), dark_mode=self.dark_mode)
         self.splitter.addWidget(self.value_editor)
 
@@ -434,6 +439,7 @@ class IniEditor(QMainWindow):
 
         self.var_editor = RainmeterEdit()
         self.var_editor.setPlaceholderText(_('Selecione um arquivo .inc acima...'))
+        self.var_editor.focused.connect(lambda: self._set_last_active(self.var_editor))
         self.var_highlighter = IniHighlighter(self.var_editor.document(), dark_mode=self.dark_mode)
         var_layout.addWidget(self.var_editor)
 
@@ -1401,47 +1407,121 @@ class IniEditor(QMainWindow):
             bang_result = dialog.get_result()
             
             # Identificar qual editor está ativo
-            current_tab_index = self.tabs.currentIndex()
-            if current_tab_index == 0:
-                editor = self.value_editor
-            elif current_tab_index == 1:
-                editor = self.var_editor
-            else:
-                QMessageBox.warning(self, "Aviso", "Selecione a aba 'Editor' ou 'Variáveis' para inserir o Bang.")
-                return
+            # Determinar qual editor deve receber o bang
+            editor = self.last_active_editor if self.last_active_editor else self.value_editor
+            
+            # Mudar para a aba correspondente se necessário
+            if editor == self.value_editor:
+                self.tabs.setCurrentIndex(0)
+            elif editor == self.var_editor:
+                self.tabs.setCurrentIndex(2) # Aba de Variáveis Globais
                 
             # Inserir na posição do cursor
             editor.insertPlainText(bang_result)
 
     def insert_asset_path(self, path):
-        # Identificar qual editor está ativo
-        current_tab_index = self.tabs.currentIndex()
-        if current_tab_index == 0:
-            editor = self.value_editor
-        elif current_tab_index == 1:
-            editor = self.var_editor
-        else:
-            # Se clicou na aba de ativos, mas não tem editor focado, 
-            # talvez queira ir para o editor de skin por padrão
-            editor = self.value_editor
+        # Determinar qual editor deve receber o caminho
+        editor = self.last_active_editor if self.last_active_editor else self.value_editor
+        
+        # Mudar para a aba correspondente se necessário
+        if editor == self.value_editor:
             self.tabs.setCurrentIndex(0)
+        elif editor == self.var_editor:
+            self.tabs.setCurrentIndex(2) # Aba de Variáveis Globais
             
         editor.insertPlainText(path)
-        QMessageBox.information(self, "Sucesso", f"Caminho '{path}' inserido no editor!")
+        QMessageBox.information(self, _("Sucesso"), _("Caminho do ativo inserido no editor!"))
 
     def insert_snippet(self, code):
-        # Identificar qual editor está ativo
-        current_tab_index = self.tabs.currentIndex()
-        if current_tab_index == 0:
-            editor = self.value_editor
-        elif current_tab_index == 1:
-            editor = self.var_editor
+        """Insere um snippet de forma estruturada na árvore ou como texto no editor."""
+        import re
+        from io import StringIO
+        
+        # 1. Verificar se o snippet contém cabeçalhos de seção (ex: [MeterName])
+        # Usamos uma busca por '[' no início de qualquer linha
+        has_sections = bool(re.search(r'^\[.*\]', code, re.MULTILINE))
+        
+        if has_sections:
+            # MODO ESTRUTURADO: Adicionar novas seções e chaves na árvore
+            if not self.ini_file:
+                # Fallback para texto se não houver arquivo aberto (ex: Variáveis Globais)
+                self._insert_snippet_raw(code)
+                return
+
+            snippet_config = configparser.ConfigParser(interpolation=None, strict=False)
+            try:
+                # Permitir linhas antes da primeira seção (comentários)
+                snippet_config.read_string(code)
+            except Exception as e:
+                # Se falhar o parsing, fallback para texto
+                self._insert_snippet_raw(code)
+                return
+            
+            self.undo_stack.beginMacro(_("Inserir Snippet (Estruturado)"))
+            for section in snippet_config.sections():
+                # Gerar nome único para a seção se já existir
+                new_name = section
+                counter = 1
+                while self.config.has_section(new_name):
+                    new_name = f"{section}_{counter}"
+                    counter += 1
+                
+                # Criar a seção e suas chaves via Undo Commands
+                self.undo_stack.push(AddSectionCommand(self, new_name))
+                for key, value in snippet_config.items(section):
+                    self.undo_stack.push(AddKeyCommand(self, new_name, key, value))
+            
+            self.undo_stack.endMacro()
+            self.tabs.setCurrentIndex(0) # Forçar volta para o editor de skin
+            QMessageBox.information(self, _("Sucesso"), _("Snippet adicionado como novas seções na árvore!"))
+            
         else:
-            editor = self.value_editor
+            # MODO DE INSERÇÃO NA SEÇÃO: Se não tem cabeçalho, tenta inserir na seção selecionada
+            selected_items = self.tree.selectedItems()
+            target_section = None
+            
+            if selected_items:
+                item = selected_items[0]
+                data = item.data(0, Qt.ItemDataRole.UserRole)
+                if data:
+                    # Se for seção, usa ela. Se for chave, usa a seção pai dela.
+                    target_section = data[1] if data[0] in ('section', 'key') else None
+            
+            if target_section and self.tabs.currentIndex() == 0:
+                # Parsear o snippet simples (linha por linha key=value)
+                self.undo_stack.beginMacro(_("Inserir Snippet na Seção"))
+                added_keys = 0
+                for line in code.splitlines():
+                    line = line.strip()
+                    if not line or line.startswith(';'): continue
+                    if '=' in line:
+                        k, v = line.split('=', 1)
+                        self.undo_stack.push(AddKeyCommand(self, target_section, k.strip(), v.strip()))
+                        added_keys += 1
+                
+                self.undo_stack.endMacro()
+                if added_keys > 0:
+                    QMessageBox.information(self, _("Sucesso"), _("Novas chaves adicionadas à seção selecionada!"))
+                    return
+
+            # FALLBACK FINAL: Inserir como texto bruto no editor focado
+            self._insert_snippet_raw(code)
+
+    def _insert_snippet_raw(self, code):
+        """Fallback para inserir o snippet como texto bruto no editor focado."""
+        editor = self.last_active_editor if self.last_active_editor else self.value_editor
+        
+        # Mudar para a aba correspondente se necessário
+        if editor == self.value_editor:
             self.tabs.setCurrentIndex(0)
+        elif editor == self.var_editor:
+            self.tabs.setCurrentIndex(2) # Aba de Variáveis Globais
             
         editor.insertPlainText(code)
-        QMessageBox.information(self, "Sucesso", "Snippet inserido no editor!")
+        QMessageBox.information(self, _("Sucesso"), _("Snippet inserido como texto no editor."))
+
+    def _set_last_active(self, editor):
+        self.last_active_editor = editor
 
     def show_log_viewer(self):
         if not self.log_window:
