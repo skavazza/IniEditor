@@ -2,7 +2,7 @@ from .highlighter import IniHighlighter
 from .code_editor import RainmeterEdit
 from .canvas import VisualCanvas
 from .panels import LayerPanel, PropertyPanel
-from .dialogs import BangGeneratorDialog, RmskinExportDialog, NewSkinDialog, AddSkinDialog, PreferencesDialog, AutocompleteInputDialog, HelpDialog
+from .dialogs import ShapeEditorDialog, BangGeneratorDialog, RmskinExportDialog, NewSkinDialog, AddSkinDialog, PreferencesDialog, AutocompleteInputDialog, HelpDialog
 from .managers import AssetManager, SnippetManager, FontManager, LogViewer
 
 __all__ = [

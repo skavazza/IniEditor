@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QColor, QIcon
 from PyQt6.QtCore import Qt, QSize
 from utils import resource_path
+from .dialogs import ShapeEditorDialog
 
 class LayerItemWidget(QWidget):
     visibility_toggled = None # function(section, is_visible)
@@ -298,9 +299,9 @@ class PropertyPanel(QWidget):
             self._add_color_property("LineColor", props.get('linecolor', '255,255,255,255'))
             self._add_combo_property("Solid", props.get('solid', '0'), ['0', '1'])
         elif meter_type == 'shape':
-            self._add_property("Shape", props.get('shape', ''))
-            self._add_property("Shape2", props.get('shape2', ''))
-            self._add_property("Shape3", props.get('shape3', ''))
+            self._add_shape_property("Shape", props.get('shape', ''))
+            self._add_shape_property("Shape2", props.get('shape2', ''))
+            self._add_shape_property("Shape3", props.get('shape3', ''))
             self._add_combo_property("AntiAlias", props.get('antialias', '1'), ['1', '0'])
 
     def _add_property(self, key, value):
@@ -426,6 +427,33 @@ class PropertyPanel(QWidget):
             add_btn.clicked.connect(_pick_style)
             layout.addWidget(add_btn)
 
+        self.form_layout.addRow(key + ":", container)
+
+    def _add_shape_property(self, key, value):
+        """Campo para Shape com botão para abrir o editor visual."""
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        edit = QLineEdit(str(value))
+        edit.editingFinished.connect(lambda k=key, e=edit: self._on_property_changed(k, e.text()))
+        layout.addWidget(edit)
+        
+        edit_btn = QPushButton("...")
+        edit_btn.setFixedWidth(25)
+        edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        edit_btn.setToolTip("Abrir Editor de Forma")
+        
+        def _open_shape_editor():
+            dialog = ShapeEditorDialog(self, edit.text())
+            if dialog.exec():
+                new_val = dialog.get_result()
+                edit.setText(new_val)
+                self._on_property_changed(key, new_val)
+                
+        edit_btn.clicked.connect(_open_shape_editor)
+        layout.addWidget(edit_btn)
+        
         self.form_layout.addRow(key + ":", container)
 
     def _on_property_changed(self, key, value):

@@ -485,3 +485,213 @@ class HelpDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+from PyQt6.QtWidgets import QSpinBox, QDoubleSpinBox
+
+class ShapeEditorDialog(QDialog):
+    def __init__(self, parent=None, initial_string="", dark_mode=True):
+        super().__init__(parent)
+        self.dark_mode = dark_mode
+        self.setWindowTitle("Editor de Formas (Shape)")
+        self.setMinimumWidth(450)
+        self.initial_string = initial_string
+        
+        self.params_inputs = {}
+        self.fill_color = "255,255,255,150"
+        self.stroke_color = "255,255,255,255"
+        self.stroke_width = 1
+        
+        self.init_ui()
+        self.parse_string(initial_string)
+
+    def init_ui(self):
+        self.main_layout = QVBoxLayout(self)
+        
+        form = QFormLayout()
+        
+        # Tipo de Forma
+        self.type_combo = QComboBox()
+        self.type_combo.addItems(["Rectangle", "Ellipse", "Line"])
+        self.type_combo.currentTextChanged.connect(self.on_type_changed)
+        form.addRow("Tipo de Forma:", self.type_combo)
+        
+        # Container para parâmetros dinâmicos
+        self.params_container = QWidget()
+        self.params_layout = QFormLayout(self.params_container)
+        self.params_layout.setContentsMargins(0, 0, 0, 0)
+        form.addRow(self.params_container)
+        
+        # Divisor
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
+        form.addRow(line)
+        
+        # Estilo
+        # Cor de Preenchimento
+        self.fill_edit = QLineEdit(self.fill_color)
+        self.fill_btn = QPushButton()
+        self.fill_btn.setFixedWidth(30)
+        self.fill_btn.clicked.connect(self.pick_fill_color)
+        
+        fill_layout = QHBoxLayout()
+        fill_layout.addWidget(self.fill_edit)
+        fill_layout.addWidget(self.fill_btn)
+        form.addRow("Cor de Preenchimento:", fill_layout)
+        
+        # Cor da Borda
+        self.stroke_edit = QLineEdit(self.stroke_color)
+        self.stroke_btn = QPushButton()
+        self.stroke_btn.setFixedWidth(30)
+        self.stroke_btn.clicked.connect(self.pick_stroke_color)
+        
+        stroke_layout = QHBoxLayout()
+        stroke_layout.addWidget(self.stroke_edit)
+        stroke_layout.addWidget(self.stroke_btn)
+        form.addRow("Cor da Borda:", stroke_layout)
+        
+        # Espessura da Borda
+        self.width_spin = QDoubleSpinBox()
+        self.width_spin.setRange(0, 100)
+        self.width_spin.setValue(self.stroke_width)
+        form.addRow("Espessura da Borda:", self.width_spin)
+        
+        self.main_layout.addLayout(form)
+        
+        # Preview
+        self.main_layout.addWidget(QLabel("<b>Resultado:</b>"))
+        self.result_edit = QLineEdit()
+        self.result_edit.setReadOnly(True)
+        self.main_layout.addWidget(self.result_edit)
+        
+        # Sinais para atualizar preview
+        self.fill_edit.textChanged.connect(self.update_preview)
+        self.stroke_edit.textChanged.connect(self.update_preview)
+        self.width_spin.valueChanged.connect(self.update_preview)
+        
+        # Botões
+        self.buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        self.main_layout.addWidget(self.buttons)
+        
+        self.on_type_changed(self.type_combo.currentText())
+
+    def on_type_changed(self, shape_type):
+        # Limpar parâmetros anteriores
+        while self.params_layout.count():
+            child = self.params_layout.takeAt(0)
+            if child.widget(): child.widget().deleteLater()
+            
+        self.params_inputs = {}
+        
+        specs = {
+            "Rectangle": ["X", "Y", "W", "H", "Radius"],
+            "Ellipse": ["CenterX", "CenterY", "RadiusX", "RadiusY"],
+            "Line": ["StartX", "StartY", "EndX", "EndY"]
+        }
+        
+        for param in specs.get(shape_type, []):
+            edit = QLineEdit("0")
+            edit.textChanged.connect(self.update_preview)
+            self.params_layout.addRow(f"{param}:", edit)
+            self.params_inputs[param] = edit
+            
+        self.update_preview()
+
+    def parse_string(self, s):
+        if not s: return
+        
+        parts = [p.strip() for p in s.split('|')]
+        if not parts: return
+        
+        # Parte 1: Forma e Coordenadas
+        main_part = parts[0]
+        main_words = main_part.split(' ', 1)
+        if len(main_words) < 2: return
+        
+        shape_type = main_words[0]
+        args_str = main_words[1]
+        args = [a.strip() for a in args_str.split(',')]
+        
+        index = self.type_combo.findText(shape_type, Qt.MatchFlag.MatchExactly)
+        if index >= 0:
+            self.type_combo.setCurrentIndex(index)
+            # Preencher inputs
+            keys = list(self.params_inputs.keys())
+            for i, val in enumerate(args):
+                if i < len(keys):
+                    self.params_inputs[keys[i]].setText(val)
+                    
+        # Modificadores
+        for mod in parts[1:]:
+            lmod = mod.lower()
+            if lmod.startswith("fill color"):
+                self.fill_color = mod[10:].strip()
+                self.fill_edit.setText(self.fill_color)
+            elif lmod.startswith("stroke color"):
+                self.stroke_color = mod[12:].strip()
+                self.stroke_edit.setText(self.stroke_color)
+            elif lmod.startswith("strokewidth"):
+                try: 
+                    self.stroke_width = float(mod[11:].strip())
+                    self.width_spin.setValue(self.stroke_width)
+                except: pass
+        
+        self.update_preview()
+
+    def update_preview(self):
+        shape_type = self.type_combo.currentText()
+        args = []
+        for key in self.params_inputs:
+            args.append(self.params_inputs[key].text() or "0")
+            
+        res = f"{shape_type} {','.join(args)}"
+        
+        # Modificadores
+        res += f" | Fill Color {self.fill_edit.text()}"
+        res += f" | Stroke Color {self.stroke_edit.text()}"
+        if self.width_spin.value() != 1:
+            res += f" | StrokeWidth {self.width_spin.value():.1f}".replace('.0', '')
+            
+        self.result_edit.setText(res)
+        self.update_color_buttons()
+
+    def update_color_buttons(self):
+        def set_btn_color(btn, color_str):
+            parts = [p.strip() for p in color_str.split(',')]
+            bg = "white"
+            if len(parts) >= 3:
+                try: bg = f"rgb({parts[0]},{parts[1]},{parts[2]})"
+                except: pass
+            btn.setStyleSheet(f"background-color: {bg}; border: 1px solid #888; border-radius: 2px;")
+            
+        set_btn_color(self.fill_btn, self.fill_edit.text())
+        set_btn_color(self.stroke_btn, self.stroke_edit.text())
+
+    def pick_fill_color(self):
+        color = self._open_picker(self.fill_edit.text())
+        if color: self.fill_edit.setText(color)
+
+    def pick_stroke_color(self):
+        color = self._open_picker(self.stroke_edit.text())
+        if color: self.stroke_edit.setText(color)
+
+    def _open_picker(self, current):
+        initial = QColor(255, 255, 255)
+        parts = [p.strip() for p in current.split(',')]
+        if len(parts) >= 3:
+            try: 
+                a = int(parts[3]) if len(parts) == 4 else 255
+                initial = QColor(int(parts[0]), int(parts[1]), int(parts[2]), a)
+            except: pass
+            
+        color = QColorDialog.getColor(initial, self, "Selecionar Cor", QColorDialog.ColorDialogOption.ShowAlphaChannel)
+        if color.isValid():
+            r, g, b, a = color.red(), color.green(), color.blue(), color.alpha()
+            return f"{r},{g},{b}" if a == 255 else f"{r},{g},{b},{a}"
+        return None
+
+    def get_result(self):
+        return self.result_edit.text()
