@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QStyleOptionViewItem, QComboBox
 )
 from PyQt6.QtCore import Qt, QSize, QTimer
-from PyQt6.QtGui import QAction, QColor, QKeySequence, QShortcut, QUndoStack
+from PyQt6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QShortcut, QUndoStack
 from PyQt6 import sip
 
 # Importações locais
@@ -117,10 +117,22 @@ class KeyValueDelegate(QStyledItemDelegate):
 
 
 class IniEditor(QMainWindow):
+    SUPPORTED_ENCODINGS = [
+        ('utf-8-sig', 'UTF-8 com BOM'),
+        ('utf-8', 'UTF-8'),
+        ('utf-16', 'UTF-16'),
+        ('utf-16-le', 'UTF-16 Little Endian'),
+        ('utf-16-be', 'UTF-16 Big Endian'),
+        ('cp1252', 'ANSI (Windows-1252)'),
+        ('latin-1', 'Latin-1'),
+    ]
+
     def __init__(self):
         super().__init__()
         self.ini_file = None
         self.var_file = None
+        self.current_encoding = 'utf-8-sig'
+        self.var_file_encoding = 'utf-8'
         self.raw_lines = []  # Linhas brutas do arquivo (preserva comentários)
         self.dark_mode = True
         self.config = configparser.ConfigParser(interpolation=None, strict=False)
@@ -206,6 +218,21 @@ class IniEditor(QMainWindow):
         export_action = QAction(_('Exportar skin (.rmskin)'), self)
         export_action.triggered.connect(self.export_rmskin)
         file_menu.addAction(export_action)
+
+        # Formatação
+        format_menu = menubar.addMenu(_('Formatação'))
+        encoding_menu = format_menu.addMenu(_('Codificação'))
+        self.encoding_action_group = QActionGroup(self)
+        self.encoding_action_group.setExclusive(True)
+        self.encoding_actions = {}
+        for encoding, label in self.SUPPORTED_ENCODINGS:
+            action = QAction(f'Codificação em {label}', self)
+            action.setCheckable(True)
+            action.triggered.connect(lambda checked, enc=encoding: self.set_file_encoding(enc))
+            self.encoding_action_group.addAction(action)
+            self.encoding_actions[encoding] = action
+            encoding_menu.addAction(action)
+        self.update_encoding_menu()
 
         # Editar
         edit_menu = menubar.addMenu(_('Editar'))
@@ -721,17 +748,15 @@ class IniEditor(QMainWindow):
         self.undo_stack.clear()
         self.raw_lines = []
         
-        encodings = ['utf-8-sig', 'utf-16', 'cp1252']
         success = False
         last_error = ""
-        used_enc = 'utf-8-sig'
+        used_enc = self.current_encoding
 
-        for enc in encodings:
+        for enc, _label in self.SUPPORTED_ENCODINGS:
             try:
                 with open(file_path, 'r', encoding=enc) as f:
                     content = f.read()
                 # Alimentar o configparser com o conteúdo lido
-                import io
                 self.config.read_string(content)
                 # Armazenar linhas brutas para preservação de comentários
                 self.raw_lines = content.splitlines(keepends=True)
@@ -752,6 +777,8 @@ class IniEditor(QMainWindow):
             return
 
         self.ini_file = file_path
+        self.current_encoding = used_enc
+        self.update_encoding_menu()
         
         # Tentar carregar variáveis globais e ativos ANTES do update_tree
         # para que o synchronize_canvas tenha os caminhos resolvidos
@@ -1195,6 +1222,16 @@ class IniEditor(QMainWindow):
                 self.undo_stack.push(AddKeyCommand(self, section_name, 'W', '100'))
                 self.undo_stack.push(AddKeyCommand(self, section_name, 'H', '10'))
                 self.undo_stack.push(AddKeyCommand(self, section_name, 'BarColor', '0,122,204,255'))
+            elif meter_type == 'Roundline':
+                self.undo_stack.push(AddKeyCommand(self, section_name, 'W', '120'))
+                self.undo_stack.push(AddKeyCommand(self, section_name, 'H', '120'))
+                self.undo_stack.push(AddKeyCommand(self, section_name, 'StartAngle', '0'))
+                self.undo_stack.push(AddKeyCommand(self, section_name, 'RotationAngle', '360'))
+                self.undo_stack.push(AddKeyCommand(self, section_name, 'LineStart', '20'))
+                self.undo_stack.push(AddKeyCommand(self, section_name, 'LineLength', '40'))
+                self.undo_stack.push(AddKeyCommand(self, section_name, 'LineWidth', '8'))
+                self.undo_stack.push(AddKeyCommand(self, section_name, 'LineColor', '0,180,255,255'))
+                self.undo_stack.push(AddKeyCommand(self, section_name, 'AntiAlias', '1'))
             elif meter_type == 'Image':
                 # Solicitar imagem ao usuário
                 img_path, filter_ = QFileDialog.getOpenFileName(
@@ -1457,12 +1494,12 @@ class IniEditor(QMainWindow):
         file_path = self.var_file_combo.itemData(index)
         if not file_path:
             return
-        encodings = ['utf-8-sig', 'utf-16', 'cp1252', 'latin-1']
-        for enc in encodings:
+        for enc, _label in self.SUPPORTED_ENCODINGS:
             try:
                 with open(file_path, 'r', encoding=enc) as f:
                     content = f.read()
                 self.var_file = file_path
+                self.var_file_encoding = enc
                 self.var_editor.setPlainText(content)
                 self.btn_save_vars.setEnabled(True)
                 var_idx = self.tabs.indexOf(self.var_widget)
@@ -1479,7 +1516,7 @@ class IniEditor(QMainWindow):
             print(f"Tentando salvar variáveis em: {self.var_file}")
             try:
                 create_backup(self.var_file)
-                with open(self.var_file, 'w', encoding='utf-8') as f:
+                with open(self.var_file, 'w', encoding=self.current_encoding or self.var_file_encoding) as f:
                     f.write(self.var_editor.toPlainText())
                 print("Salvo com sucesso!")
                 QMessageBox.information(self, 'Sucesso', 'Variáveis globais salvas com sucesso!')
@@ -1580,13 +1617,17 @@ class IniEditor(QMainWindow):
         try:
             create_backup(self.ini_file)
             content = self._rebuild_from_raw() if self.raw_lines else None
-            with open(self.ini_file, 'w', encoding='utf-8-sig') as f:
+            with open(self.ini_file, 'w', encoding=self.current_encoding) as f:
                 if content is not None:
                     f.write(content)
                 else:
                     self.config.write(f)  # Fallback se raw_lines estiver vazio
             if not silent:
-                QMessageBox.information(self, _('Sucesso'), _('Arquivo salvo com sucesso!'))
+                QMessageBox.information(
+                    self,
+                    _('Sucesso'),
+                    f'Arquivo salvo com sucesso em {self.encoding_display_name(self.current_encoding)}!'
+                )
         except Exception as e:
             if not silent:
                 QMessageBox.critical(self, _('Erro'), f'Erro ao salvar arquivo: {str(e)}')
@@ -1598,6 +1639,30 @@ class IniEditor(QMainWindow):
         if file_path:
             self.ini_file = file_path
             self.save_file()
+
+    def encoding_display_name(self, encoding):
+        for enc, label in self.SUPPORTED_ENCODINGS:
+            if enc == encoding:
+                return label
+        return encoding
+
+    def update_encoding_menu(self):
+        if not hasattr(self, 'encoding_actions'):
+            return
+        for encoding, action in self.encoding_actions.items():
+            action.blockSignals(True)
+            action.setChecked(encoding == self.current_encoding)
+            action.blockSignals(False)
+
+    def set_file_encoding(self, encoding):
+        self.current_encoding = encoding
+        self.update_encoding_menu()
+        if self.ini_file:
+            QMessageBox.information(
+                self,
+                'Codificação atualizada',
+                f'O arquivo atual será salvo em {self.encoding_display_name(encoding)}.'
+            )
 
     # --- Funções de Projeto ---
 

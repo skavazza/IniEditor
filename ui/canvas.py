@@ -349,6 +349,7 @@ class VisualCanvas(QGraphicsView):
             add_string = menu.addAction("Adicionar Texto (String)")
             add_image = menu.addAction("Adicionar Imagem (Image)")
             add_bar = menu.addAction("Adicionar Barra (Bar)")
+            add_roundline = menu.addAction("Adicionar Roundline (Roundline)")
             add_shape = menu.addAction("Adicionar Forma (Shape)")
             action = menu.exec(event.globalPos())
             scene_pos = self.mapToScene(event.pos())
@@ -359,6 +360,8 @@ class VisualCanvas(QGraphicsView):
                 if self.add_requested_signal: self.add_requested_signal(x, y, 'Image')
             elif action == add_bar:
                 if self.add_requested_signal: self.add_requested_signal(x, y, 'Bar')
+            elif action == add_roundline:
+                if self.add_requested_signal: self.add_requested_signal(x, y, 'Roundline')
             elif action == add_shape:
                 if self.add_requested_signal: self.add_requested_signal(x, y, 'Shape')
 

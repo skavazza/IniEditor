@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem, 
-    QFormLayout, QLineEdit, QComboBox, QFontComboBox, QHBoxLayout, QPushButton, QColorDialog
+    QFormLayout, QLineEdit, QComboBox, QFontComboBox, QHBoxLayout, QPushButton, QColorDialog,
+    QScrollArea, QSizePolicy, QFrame
 )
 from PyQt6.QtGui import QColor, QIcon
 from PyQt6.QtCore import Qt, QSize
@@ -223,12 +224,17 @@ class PropertyPanel(QWidget):
         
         self.label = QLabel("<b>Propriedades</b>")
         self.layout.addWidget(self.label)
-        
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.layout.addWidget(self.scroll_area, 1)
+
         self.form_container = QWidget()
+        self.form_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         self.form_layout = QFormLayout(self.form_container)
-        self.layout.addWidget(self.form_container)
-        
-        self.layout.addStretch()
+        self.scroll_area.setWidget(self.form_container)
+
         self.setMinimumWidth(200)
 
     def set_theme(self, dark_mode):
@@ -283,6 +289,14 @@ class PropertyPanel(QWidget):
         elif meter_type == 'bar':
             self._add_color_property("BarColor", props.get('barcolor', ''))
             self._add_combo_property("BarOrientation", props.get('barorientation', 'Horizontal'), ['Horizontal', 'Vertical'])
+        elif meter_type == 'roundline':
+            self._add_property("StartAngle", props.get('startangle', '0'))
+            self._add_property("RotationAngle", props.get('rotationangle', '360'))
+            self._add_property("LineStart", props.get('linestart', '0'))
+            self._add_property("LineLength", props.get('linelength', '100'))
+            self._add_property("LineWidth", props.get('linewidth', '1'))
+            self._add_color_property("LineColor", props.get('linecolor', '255,255,255,255'))
+            self._add_combo_property("Solid", props.get('solid', '0'), ['0', '1'])
         elif meter_type == 'shape':
             self._add_property("Shape", props.get('shape', ''))
             self._add_property("Shape2", props.get('shape2', ''))

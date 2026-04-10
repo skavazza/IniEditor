@@ -47,6 +47,7 @@ Estamos transformando o editor de código em um **Editor Visual (WYSIWYG)** comp
 - [x] **Salvar/Carregar Projeto:** Estado do editor salvo em JSON para não perder o layout e poder continuar a edição posteriormente.
 - [x] **Preferências de Usuário:** Auto-save configurável e troca de idioma (i18n).
 - [x] **Gerenciador de Ativos:** Busca e visualização de imagens/fontes na pasta `@Resources`.
+- [x] **Menu de Codificação:** Seleção explícita do encoding do `.ini` para leitura/salvamento, evitando caracteres corrompidos em skins no desktop.
 
 ---
 
