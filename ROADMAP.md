@@ -26,7 +26,7 @@
 
 ## 🚀 Fase Atual (v2.0 - Editor Visual Drag-and-Drop)
 
-Estamos transformando o editor de código em um **Editor Visual (WYSIWYG)** completo, conforme especificado no `PROMPT_PYTHON_CODER.md`.
+Estamos transformando o editor de código em um **Editor Visual (WYSIWYG)** completo, conforme especificado no `TO_CODER.md`.
 
 ### 1. Interface Principal
 - [x] **Canvas Visual:** Área de trabalho para renderizar os elementos visualmente.
