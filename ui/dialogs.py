@@ -1,11 +1,12 @@
 import os
 import utils
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, 
+    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
     QComboBox, QLabel, QTextEdit, QDialogButtonBox, QFileDialog, QMessageBox,
-    QCompleter
+    QCompleter, QColorDialog
 )
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor
 
 class BangGeneratorDialog(QDialog):
     def __init__(self, parent=None, dark_mode=True):
@@ -677,10 +678,7 @@ class ShapeEditorDialog(QDialog):
         if color: self.stroke_edit.setText(color)
 
     def _open_picker(self, current):
-        color = utils.parse_color(current)
-        if color:
-            initial = color
-            
+        initial = utils.parse_color(current) or QColor(255, 255, 255)
         color = QColorDialog.getColor(initial, self, "Selecionar Cor", QColorDialog.ColorDialogOption.ShowAlphaChannel)
         if color.isValid():
             r, g, b, a = color.red(), color.green(), color.blue(), color.alpha()
