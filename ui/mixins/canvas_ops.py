@@ -3,15 +3,16 @@ import re
 import configparser
 from PyQt6.QtWidgets import QMessageBox, QFileDialog, QInputDialog
 from commands import (
-    ChangeValueCommand, MoveItemCommand, DeleteSectionCommand, 
+    ChangeValueCommand, MoveItemCommand, DeleteSectionCommand,
     AddSectionCommand, AddKeyCommand
 )
 from utils import (
-    resolve_rainmeter_variables, 
-    parse_variables_from_config, 
+    resolve_rainmeter_variables,
+    parse_variables_from_config,
     resolve_variable_references
 )
 from i18n import _
+from core.constants import SUPPORTED_ENCODINGS
 
 class CanvasIntegrationMixin:
     """Mixin para sincronização entre os dados (INI) e a visualização gráfica (Canvas e Painel de Camadas)."""
@@ -311,6 +312,20 @@ class CanvasIntegrationMixin:
                 import utils
                 utils.logger.warning(f"Erro ao ler include string no configparser: {e}")
 
+        def _read_file_with_fallback(path, label):
+            import utils
+            for enc, _ in SUPPORTED_ENCODINGS:
+                try:
+                    with open(path, 'r', encoding=enc) as f:
+                        _read_inc(f.read())
+                    return
+                except UnicodeDecodeError:
+                    continue
+                except Exception as e:
+                    utils.logger.warning(f"Erro ao carregar e ler arquivo de {label}: {e}")
+                    return
+            utils.logger.warning(f"Erro ao carregar e ler arquivo de {label}: nenhuma codificação suportada funcionou")
+
         if self.ini_file:
             ini_dir = os.path.dirname(self.ini_file)
             for section in self.config.sections():
@@ -321,20 +336,10 @@ class CanvasIntegrationMixin:
                         res_dir = os.path.dirname(self.var_file) if self.var_file else os.path.join(ini_dir, '@Resources')
                         raw_inc = raw_inc.replace('#@#', res_dir + os.sep)
                         if os.path.exists(raw_inc):
-                            try:
-                                with open(raw_inc, 'r', encoding='utf-8-sig') as f: 
-                                    _read_inc(f.read())
-                            except Exception as e:
-                                import utils
-                                utils.logger.warning(f"Erro ao carregar e ler arquivo de include '{raw_inc}': {e}")
-        
+                            _read_file_with_fallback(raw_inc, f"include '{raw_inc}'")
+
         if self.var_file and os.path.exists(self.var_file):
-            try:
-                with open(self.var_file, 'r', encoding='utf-8-sig') as f: 
-                    _read_inc(f.read())
-            except Exception as e:
-                import utils
-                utils.logger.warning(f"Erro ao carregar e ler arquivo de variável global '{self.var_file}': {e}")
+            _read_file_with_fallback(self.var_file, f"variável global '{self.var_file}'")
 
         # Resolver referências cruzadas (#A# = #B#)
         self.resolved_vars = resolve_variable_references(self.resolved_vars)
