@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(wc:*)",
-      "Bash(grep -r \"class \" /d/IniEditor/ui/*.py)",
-      "Bash(grep \"class \" /d/IniEditor/ui/*.py)"
-    ]
-  }
-}
