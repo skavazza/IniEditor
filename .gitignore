@@ -1,7 +1,7 @@
 /.agent
 /.venv
-.agents
-.claude
+/.agents
+/.claude
 /build
 /dist
 /IniEditor.rar
